@@ -1,5 +1,14 @@
 # Beckmann reaction summer project
 ### Structure
+beckmann-pipeline/
+├── app.py           Flask server
+├── templates/
+│   └── index.html   UI
+├── scripts/
+│   └── 01_smiles_to_conformers.py
+└── data/
+    ├── inputs/
+    └── outputs/
 
 ## Setting up python environment 
 ```bash
