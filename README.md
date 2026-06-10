@@ -28,7 +28,7 @@ conda env create -f environment.yml
 
 Add:
 ```bash
-pip install aimnet2calc
+pip install "aimnet[ase]"
 ```
 
 ### Issues

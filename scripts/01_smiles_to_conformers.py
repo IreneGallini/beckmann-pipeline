@@ -33,5 +33,5 @@ if __name__ == '__main__':
         verbose=True,
     )
 
-    out = main(args)
+    out = main(args) #runs
     print(f"\nDone. Output written to: {out}")
