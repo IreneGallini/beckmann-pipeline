@@ -1,5 +1,6 @@
 # Beckmann reaction summer project
 ### Structure
+```
 beckmann-pipeline/
 ├── app.py           Flask server
 ├── templates/
@@ -9,6 +10,7 @@ beckmann-pipeline/
 └── data/
     ├── inputs/
     └── outputs/
+```
 
 ## Setting up python environment 
 ```bash
