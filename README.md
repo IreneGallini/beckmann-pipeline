@@ -24,6 +24,11 @@ Anyone can run this command and have identical setup
 conda env create -f environment.yml
 ```
 
+Add:
+```bash
+pip install aimnet2calc
+```
+
 ### Issues
 UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
 
