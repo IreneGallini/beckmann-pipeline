@@ -21,3 +21,9 @@ PROJECT_ROOT = Path(__file__).parent.parent
 conformer_dir  = PROJECT_ROOT / "data" / "output"  / "conformers"
 output_dir = PROJECT_ROOT / "data" / "output" / "aimnet_optimized"
 output_dir.mkdir(parents=True, exist_ok=True)
+
+# Find most recent Auto3D output .sdf
+# Load conformers, group by molecule name
+# Pick lowest energy conformer per molecule
+# AIMNet2 optimization
+
