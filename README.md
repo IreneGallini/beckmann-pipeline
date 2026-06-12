@@ -29,6 +29,7 @@ conda env create -f environment.yml
 Add:
 ```bash
 pip install "aimnet[ase]"
+pip install pytest
 ```
 
 ### Issues
