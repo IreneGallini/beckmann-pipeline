@@ -104,12 +104,5 @@ def test_step2_rmsd_reasonable():
         # Flag large structural changes - may indicate optimization issue
         assert rmsd < 2.0, f"{name}: RMSD {rmsd:.3f} Å is unusually large"
 
-''' initial test output -> issue with script 2
-tests/test_draft.py::test_step1_output_exists PASSED
-tests/test_draft.py::test_step1_conformer_count PASSED
-tests/test_draft.py::test_step2_output_exists FAILED
-tests/test_draft.py::test_step2_energy_decreased FAILED
-tests/test_draft.py::test_step2_rmsd_reasonable FAILED
-'''
 
 

@@ -1,5 +1,6 @@
 # Beckmann reaction summer project
-### Structure
+
+## Structure
 ```
 beckmann-pipeline/
 ├── app.py           Flask server
@@ -11,8 +12,24 @@ beckmann-pipeline/
     ├── inputs/
     └── outputs/
 ```
+### /tests
+
+Basic tests check that:
+- imports don't generate an error
+- script 1 and 2 generate output
+- script 1 generates k conformers 
+- script 2 generates lower energy structure + RMSD
+
+### 01_smiles_to_conformers
+
+Turn SMILES into top k conformers
+
+### 02_select_and_optimize
+
+Geometry optimization with AIMNet2 on lowest energy conformer
 
 ## Setting up python environment 
+
 ```bash
 conda create -n beckmann python=3.10 
 conda activate beckmann 
@@ -33,6 +50,7 @@ pip install pytest
 ```
 
 ### Issues
+
 UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
 Should be replaced with importlib.metadata
 
