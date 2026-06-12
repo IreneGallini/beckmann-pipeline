@@ -28,6 +28,14 @@ Turn SMILES into top k conformers
 
 Geometry optimization with AIMNet2 on lowest energy conformer
 
+### Input
+Beckmann structures ChemDraw(BeckmanPrediction.cdxml)
+Converted to smiles individual structures in [chemdraw.txt]
+RDKit can parse thorugh a .cdxml file but it can be unreliable if there are multiple structures. 
+All structures in the file are ketones (C=O) precursor of oxime. 
+Ketone + NH2OH -> oxime
+
+
 ## Setting up python environment 
 
 ```bash
