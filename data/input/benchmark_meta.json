@@ -1,0 +1,206 @@
+{
+  "mol_001": {
+    "smiles": "O=C1CCC2=C1C=CC=C2",
+    "pct_A": "33",
+    "pct_B": "67",
+    "exp_outcome": "F"
+  },
+  "mol_002": {
+    "smiles": "O=C1CCC2=C1C=CC(OC)=C2",
+    "pct_A": "0",
+    "pct_B": "100",
+    "exp_outcome": "F"
+  },
+  "mol_003": {
+    "smiles": "O=C1CCC2=C1C=CC(F)=C2",
+    "pct_A": "16",
+    "pct_B": "84",
+    "exp_outcome": "F"
+  },
+  "mol_004": {
+    "smiles": "O=C1CCC2=C1C=CC(Cl)=C2",
+    "pct_A": "17",
+    "pct_B": "83",
+    "exp_outcome": "F"
+  },
+  "mol_005": {
+    "smiles": "O=C1CCC2=C1C=CC(Br)=C2",
+    "pct_A": "12",
+    "pct_B": "88",
+    "exp_outcome": "F"
+  },
+  "mol_006": {
+    "smiles": "O=C1CCC2=C1C=CC(C)=C2",
+    "pct_A": "73",
+    "pct_B": "27",
+    "exp_outcome": "R"
+  },
+  "mol_007": {
+    "smiles": "O=C1CCC2=C1C=CC(C(F)(F)F)=C2",
+    "pct_A": "0",
+    "pct_B": "100",
+    "exp_outcome": "F"
+  },
+  "mol_008": {
+    "smiles": "O=C1CCC2=C1C=CC([N+]([O-])=O)=C2",
+    "pct_A": "0",
+    "pct_B": "100",
+    "exp_outcome": "F"
+  },
+  "mol_009": {
+    "smiles": "O=C1CCC2=C1C=C(C)C=C2",
+    "pct_A": "56",
+    "pct_B": "44",
+    "exp_outcome": "R"
+  },
+  "mol_010": {
+    "smiles": "O=C1CCC2=C1C=C(OC)C=C2",
+    "pct_A": "0",
+    "pct_B": "100",
+    "exp_outcome": "F"
+  },
+  "mol_011": {
+    "smiles": "O=C1CCC2=C1C=C(F)C=C2",
+    "pct_A": "0",
+    "pct_B": "100",
+    "exp_outcome": "F"
+  },
+  "mol_012": {
+    "smiles": "O=C1CCC2=C1C=C([N+]([O-])=O)C=C2",
+    "pct_A": "0",
+    "pct_B": "100",
+    "exp_outcome": "F"
+  },
+  "mol_013": {
+    "smiles": "O=C1CCC2=C1C(C)=CC=C2",
+    "pct_A": "56",
+    "pct_B": "44",
+    "exp_outcome": "R"
+  },
+  "mol_014": {
+    "smiles": "O=C1CCC2=C1C(F)=CC=C2",
+    "pct_A": "0",
+    "pct_B": "100",
+    "exp_outcome": "F"
+  },
+  "mol_015": {
+    "smiles": "O=C1CCC2=C1C=CC=C2C",
+    "pct_A": "59",
+    "pct_B": "41",
+    "exp_outcome": "R"
+  },
+  "mol_016": {
+    "smiles": "O=C1CCC2=C1C=CC=C2OC",
+    "pct_A": "18",
+    "pct_B": "82",
+    "exp_outcome": "F"
+  },
+  "mol_017": {
+    "smiles": "O=C1CCC2=C1C=CC=C2F",
+    "pct_A": "0",
+    "pct_B": "100",
+    "exp_outcome": "F"
+  },
+  "mol_018": {
+    "smiles": "O=C1CCC2=C1C=CC=C2[N+]([O-])=O",
+    "pct_A": "0",
+    "pct_B": "100",
+    "exp_outcome": "F"
+  },
+  "mol_019": {
+    "smiles": "O=C1CCCC2=C1C=CC=C2",
+    "pct_A": "100",
+    "pct_B": "0",
+    "exp_outcome": "R"
+  },
+  "mol_020": {
+    "smiles": "O=C1CCCC2=C1C=CC(C)=C2",
+    "pct_A": "97",
+    "pct_B": "3",
+    "exp_outcome": "R"
+  },
+  "mol_021": {
+    "smiles": "O=C1CCCC2=C1C=CC(OC)=C2",
+    "pct_A": "68",
+    "pct_B": "32",
+    "exp_outcome": "R"
+  },
+  "mol_022": {
+    "smiles": "O=C1CCCC2=C1C=CC(F)=C2",
+    "pct_A": "100",
+    "pct_B": "0",
+    "exp_outcome": "R"
+  },
+  "mol_023": {
+    "smiles": "O=C1CCCC2=C1C=CC([N+]([O-])=O)=C2",
+    "pct_A": "100",
+    "pct_B": "0",
+    "exp_outcome": "R"
+  },
+  "mol_024": {
+    "smiles": "O=C1CCCC2=C1C=C(C)C=C2",
+    "pct_A": "100",
+    "pct_B": "0",
+    "exp_outcome": "R"
+  },
+  "mol_025": {
+    "smiles": "O=C1CCCC2=C1C=C(OC)C=C2",
+    "pct_A": "100",
+    "pct_B": "0",
+    "exp_outcome": "R"
+  },
+  "mol_026": {
+    "smiles": "O=C1CCCC2=C1C=C(F)C=C2",
+    "pct_A": "100",
+    "pct_B": "0",
+    "exp_outcome": "R"
+  },
+  "mol_027": {
+    "smiles": "O=C1CCCC2=C1C=C([N+]([O-])=O)C=C2",
+    "pct_A": "98",
+    "pct_B": "2",
+    "exp_outcome": "R"
+  },
+  "mol_028": {
+    "smiles": "O=C1CCCC2=C1C(C)=CC=C2",
+    "pct_A": "99",
+    "pct_B": "1",
+    "exp_outcome": "R"
+  },
+  "mol_029": {
+    "smiles": "O=C1CCCC2=C1C(F)=CC=C2",
+    "pct_A": "100",
+    "pct_B": "0",
+    "exp_outcome": "R"
+  },
+  "mol_030": {
+    "smiles": "O=C1CCCC2=C1C=CC=C2OC",
+    "pct_A": "98",
+    "pct_B": "2",
+    "exp_outcome": "R"
+  },
+  "mol_031": {
+    "smiles": "O=C1CCCC2=C1C=CC=C2F",
+    "pct_A": "96",
+    "pct_B": "4",
+    "exp_outcome": "R"
+  },
+  "mol_032": {
+    "smiles": "O=C1CCCC2=C1C=CC(Br)=C2",
+    "pct_A": "100",
+    "pct_B": "0",
+    "exp_outcome": "R"
+  },
+  "mol_033": {
+    "smiles": "O=C1CCCC2=C1C=CC(Cl)=C2",
+    "pct_A": "100",
+    "pct_B": "0",
+    "exp_outcome": "R"
+  },
+  "mol_034": {
+    "smiles": "O=C1CCCC2=C1C=CC=C2C",
+    "pct_A": "100",
+    "pct_B": "0",
+    "exp_outcome": "R"
+  }
+}
