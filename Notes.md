@@ -28,6 +28,8 @@ Week 1 deliverable: Submit: (i) optimized E/Z structures for all substrates, (ii
 - Draw substrates in chemdraw and add to existing chemdraw.txt --> figure out consistent id numbering 
 - Protonate oxime
 - extract min energy isomer -> is it E or Z?
+- dihedral extraction of output (of OH group use it to predict rearrangement vs fragmentation) --> compare with experimental results.  O_oxime–N_oxime–C_oxime–C_aryl  Chem.rdMolTransforms.GetDihedralDeg()
+- consistent atom mapping 
 
 - Translate a structure into an atom-index map: oxime O, oxime N, oxime C, aryl/allyl carbon, and ring atoms. Important for orbital descriptors 
     - Make atom_map_template.csv for two molecules and explain each index

@@ -34,6 +34,18 @@ Converted to smiles individual structures in [chemdraw.txt]
 RDKit can parse thorugh a .cdxml file but it can be unreliable if there are multiple structures. 
 All structures in the file are ketones (C=O) precursor of oxime. 
 Ketone + NH2OH -> oxime
+Experimental results from Beckmann_results_pdf
+Unify in Beckmann input google sheets
+Choosing a unique id for all structures:
+- SMILES is not a good key because they can encode multiple valid representations of the same molecule
+
+### Benchmark dataset
+- .csv 
+- experimental result of rearrangement vs fragmentation product
+- if product A > 50% = labelled R, otherwise F
+- cases where it's around 50% are mixed output, can test separately as well 
+- Columns: id, SMILES, % product A, % product B, exp_outcome
+
 
 
 ## Setting up python environment 

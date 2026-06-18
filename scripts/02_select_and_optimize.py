@@ -68,8 +68,10 @@ for name, mol in best_conformers.items():
         numbers = [atom.GetAtomicNum() for atom in mol.GetAtoms()]
         atoms   = Atoms(numbers=numbers, positions=coords)
 
-        # Attach AIMNet2 calculator
-        atoms.calc = AIMNet2ASE(base_calc, charge=0)
+        # Attach AIMNet2 calculator; charge is auto-detected from formal charges
+        # (0 for neutral oximes, +1 for protonated C=N-[OH2+] benchmark structures)
+        mol_charge = sum(atom.GetFormalCharge() for atom in mol.GetAtoms())
+        atoms.calc = AIMNet2ASE(base_calc, charge=mol_charge)
 
         # Run optimization
         opt = LBFGS(atoms, logfile=None)
