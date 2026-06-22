@@ -21,7 +21,7 @@ It's running well. Key status:
 - Rigid/symmetric structures (374-658, 234-667, 0544-891) got 1–2 conformers; flexible ones with bulky substituents (314-235, 0924-630) got the full 5
 
 
-# Next steps
+# Week 3 
 
 Week 1 deliverable: Submit: (i) optimized E/Z structures for all substrates, (ii) one CSV summary table, and (iii) a short note identifying which substrates agree or disagree with experiment and which require manual inspection. 
 
@@ -38,3 +38,18 @@ Week 1 deliverable: Submit: (i) optimized E/Z structures for all substrates, (ii
     - Plot or tabulate each descriptor versus R_NO
 - Run the workflow in a controlled folder structure and never overwrite raw logs --> Use AIMNet/Auto3D for initial conformer filtering, then DFT optimization, then constrained N-O elongation with NBO7 at each relaxed point.
 - Document basis, charge, multiplicity, atom map, completion status, and failure mode for every molecule
+
+# Week 4
+GOAL 1: run all best conformers through Gaussian 
+- Message:
+    - pick one representative molecule mol 19 or 22 clean 100% R, 6-membered ring, no heteroatoms 
+    - ask which level of theory and basis set
+    - show input 
+- add testing for script 03 
+    - charge should be +1
+    - atom map .gjf should match oxime atom indices 
+
+
+
+    
+
