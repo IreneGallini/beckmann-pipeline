@@ -21,12 +21,12 @@ from pathlib import Path
 from rdkit import Chem
 
 # ── DFT settings ──────────────────────────────────────────────────────────────
-FUNCTIONAL   = "B3LYP"
+FUNCTIONAL   = "wB97XD"
 BASIS        = "6-311+G(d,p)"
 JOB_TYPE     = "sp"       # "sp" = single-point on AIMNet2 geometry; "opt" = DFT re-opt
 NPROC        = 8
 MEM_GB       = 16
-CHARGE       = 0
+CHARGE       = 1   # protonated activated oxime (C=N-[OH2+])
 MULTIPLICITY = 1
 
 # NBO7 keywords fed to the $NBO…$END section (pop=nboread activates this block).
@@ -36,7 +36,7 @@ MULTIPLICITY = 1
 NBO_KEYWORDS = "E2PERT BNDIDX NBOSUM"
 # ──────────────────────────────────────────────────────────────────────────────
 
-OXIME_PAT = Chem.MolFromSmarts('[C:1]=[N:2]-[OH1:3]')
+OXIME_PAT = Chem.MolFromSmarts('[C:1]=[N:2]-[O+:3]')  # matches [OH2+] in protonated activated oxime
 
 
 def _gjf(name: str, coords: list[tuple], oxime_label: str) -> str:

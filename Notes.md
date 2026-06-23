@@ -50,6 +50,55 @@ GOAL 1: run all best conformers through Gaussian
     - atom map .gjf should match oxime atom indices 
 
 
+### Atom mapping
+Gaussian numbers atoms by their position in the coordinate block atom 1 is the first line, atom 2 is the second, and so on. NBO7's output (E2PERT donor/acceptor table, bond indices, etc.) refers back to these same numbers. But which atom is the oxime carbon? Which is nitrogen? That depends entirely on how the SDF was written, and it varies molecule to molecule.
 
+The label [oxime: C3=N2-O1] in the .gjf title is a human-readable bookmark: "in this particular file, the C=N–O atoms are at positions 3, 2, 1." When you later parse NBO output for the C=N π-bond or the N–O σ* orbital, you know exactly which atom numbers to look for without opening Avogadro.
+
+---
+Step 1 — SMARTS pattern
+
+OXIME_PAT = Chem.MolFromSmarts('[C:1]=[N:2]-[O+:3]')
+
+This is a SMARTS query with atom map numbers (:1, :2, :3). The SMARTS encodes the connectivity of the activated protonated oxime:
+- [C:1] — any carbon, labelled 1
+- =[N:2] — double bond to any nitrogen, labelled 2
+- -[O+:3] — single bond to a positively charged oxygen (the [OH2+]), labelled 3
+
+The [O+] is the key fix from earlier — the neutral [OH1] pattern never matched because our molecules are protonated activated oximes (C=N-[OH2+]), not neutral hydroxylamine oximes.
+
+---
+Step 2 — substructure match
+
+match = mol.GetSubstructMatch(OXIME_PAT)
+
+GetSubstructMatch returns a tuple of RDKit atom indices (0-based) for the atoms that match the query in order of the map numbers :1, :2, :3. For mol_019_E it returns (2, 1, 0):
+- atom index 2 → C (map label 1)
+- atom index 1 → N (map label 2)
+- atom index 0 → O (map label 3)
+
+---
+Step 3 — convert to Gaussian 1-based numbering
+
+ci, ni, oi = (idx + 1 for idx in match)
+oxime_label = f"[oxime: C{ci}=N{ni}-O{oi}]"
+
+The coords list is built by iterating enumerate(mol.GetAtoms()), so atom at RDKit index i lands on line i+1 of the coordinate block. Adding 1 converts to Gaussian's 1-based numbering. For mol_019_E: C3=N2-O1.
+
+---
+Why this matters for NBO7
+
+When the Gaussian job finishes, the NBO7 output will contain entries like:
+
+     10. BD ( 1) C  3 - N  2        → this is the C=N π bond
+     ...
+     E2PERT:  BD*(1) N  2 - O  1 /  BD  C  3 - N  2   15.3 kcal/mol
+
+Because the .gjf title already says [oxime: C3=N2-O1], you can write a parser that reads the label, extracts the three atom numbers, and uses them as keys to pull the right NBOs out of the output — without hard-coding any indices. The same parsing logic will work for all 68 molecules because each file carries its own map.
+
+---
+The connection to the tests
+
+test_step3_oxime_atom_map_matches_sdf closes the loop: it reads each .gjf back, re-runs the SMARTS match on the SDF molecule, and asserts that the label in the file equals the match result. This catches any future bug where, say, the coordinate ordering and the SMARTS match diverge.
     
 

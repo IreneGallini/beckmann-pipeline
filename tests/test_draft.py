@@ -105,4 +105,71 @@ def test_step2_rmsd_reasonable():
         assert rmsd < 2.0, f"{name}: RMSD {rmsd:.3f} Å is unusually large"
 
 
+# ── Script 03 tests ────────────────────────────────────────────────────────────
 
+def test_step3_output_exists():
+    """Has script 03 produced at least one .gjf file?"""
+    dft_dir = PROJECT_ROOT / "data" / "output" / "dft_inputs"
+    gjf_files = list(dft_dir.glob("**/*.gjf"))
+    assert len(gjf_files) > 0, "Run script 03 first"
+
+
+def test_step3_charge_is_plus1():
+    """Every .gjf must specify charge 1 (protonated activated oxime is cationic)."""
+    dft_dir = PROJECT_ROOT / "data" / "output" / "dft_inputs"
+    gjf_files = list(dft_dir.glob("**/*.gjf"))
+    assert gjf_files, "Run script 03 first"
+    for gjf in gjf_files:
+        text = gjf.read_text()
+        # The charge/multiplicity line is the first line after the blank line
+        # following the molecule title; pattern: "^charge multiplicity$"
+        for line in text.splitlines():
+            parts = line.split()
+            if len(parts) == 2 and all(p.lstrip("-").isdigit() for p in parts):
+                charge, mult = int(parts[0]), int(parts[1])
+                assert charge == 1, (
+                    f"{gjf.name}: charge={charge}, expected 1 "
+                    "(protonated activated oxime C=N-[OH2+])"
+                )
+                assert mult == 1, f"{gjf.name}: multiplicity={mult}, expected 1"
+                break
+
+
+def test_step3_oxime_atom_map_matches_sdf():
+    """
+    The [oxime: C{ci}=N{ni}-O{oi}] label in each .gjf title must match the
+    RDKit substructure match on the same molecule from the optimized SDF.
+    """
+    import re
+    from rdkit import Chem
+
+    sdf_path = PROJECT_ROOT / "data" / "output" / "aimnet_optimized" / "best_aimnet_optimized.sdf"
+    dft_dir  = PROJECT_ROOT / "data" / "output" / "dft_inputs"
+    assert sdf_path.exists(), "Run script 02 first"
+
+    oxime_pat = Chem.MolFromSmarts("[C:1]=[N:2]-[O+:3]")
+
+    sdf_mols = {}
+    for mol in Chem.SDMolSupplier(str(sdf_path), removeHs=False):
+        if mol is not None:
+            sdf_mols[mol.GetProp("_Name")] = mol
+
+    label_re = re.compile(r"\[oxime:\s*C(\d+)=N(\d+)-O(\d+)\]")
+
+    for gjf in dft_dir.glob("**/*.gjf"):
+        name = gjf.stem
+        if name not in sdf_mols:
+            continue
+        mol = sdf_mols[name]
+        match = mol.GetSubstructMatch(oxime_pat)
+        assert match, f"{name}: oxime pattern not found in SDF molecule"
+        expected = tuple(idx + 1 for idx in match)  # 1-based
+
+        text = gjf.read_text()
+        m = label_re.search(text)
+        assert m, f"{gjf.name}: no [oxime: C=N-O] label found in title line"
+        found = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        assert found == expected, (
+            f"{name}: gjf label C{found[0]}=N{found[1]}-O{found[2]} "
+            f"!= expected C{expected[0]}=N{expected[1]}-O{expected[2]}"
+        )
