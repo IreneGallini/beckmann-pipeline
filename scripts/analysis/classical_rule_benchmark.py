@@ -1,19 +1,20 @@
 """
-Step 4: Extract O–N–C–C_aryl and O–N–C–C_allyl dihedrals from AIMNet2-optimized
-E/Z oxime structures, apply the classical Beckmann rule, and compare with experiment.
+Baseline benchmark: does the classical anti-periplanar rule predict Beckmann outcomes?
 
-Classical rule: the group ANTI (≥150°) to the activated N-O leaving group migrates.
-  - Aryl anti  → aryl migrates → product A dominates → label R
-  - Alkyl anti → alkyl migrates → product B dominates → label F
-  - Neither anti → flag for manual inspection
+Classical rule: the substituent ANTI (|dihedral| ≥150°) to the N-O leaving group
+migrates. Aryl anti → rearrangement (R); alkyl anti → fragmentation (F).
+
+This script tests that hypothesis against the 34-molecule benchmark set and shows
+it achieves only ~59% accuracy — motivating the DFT/NBO orbital-character approach.
+This is a one-off analysis, not a step in the main prediction pipeline.
 
 Inputs:
   data/output/aimnet_optimized/best_aimnet_optimized.sdf
-  data/input/benchmark_meta.json   (written by 00_benchmark_to_oximes.py)
+  data/input/benchmark_meta.json
 
 Outputs:
-  data/output/week1_benchmark_results.csv
-  data/output/week1_activated_oximes/mol_XXX/mol_XXX_{E,Z}_opt.xyz
+  data/output/analysis/classical_rule_results.csv
+  data/output/analysis/classical_rule_xyz/mol_XXX/mol_XXX_{E,Z}_opt.xyz
 """
 import csv
 import json
@@ -25,27 +26,19 @@ from pathlib import Path
 from rdkit import Chem
 from rdkit.Chem import rdMolTransforms
 
-# Match C=N-O regardless of protonation state on O; O must not be in a ring
-OXIME_PAT    = Chem.MolFromSmarts('[C:1]=[N:2]-[O;!R:3]')
-ANTI_THRESH  = 150.0   # |dihedral| >= this (degrees) → anti
+OXIME_PAT   = Chem.MolFromSmarts('[C:1]=[N:2]-[O;!R:3]')
+ANTI_THRESH = 150.0
 
 
 def abs_dihedral(conf, i: int, j: int, k: int, l: int) -> float:
-    """Return |dihedral| in [0, 180]; 180 = anti, 0 = syn."""
     return abs(rdMolTransforms.GetDihedralDeg(conf, i, j, k, l))
 
 
 def get_oxime_atoms(mol: Chem.Mol):
-    """
-    Identify (cox_idx, nox_idx, oox_idx, c_aryl_idx, c_allyl_idx).
-    C_aryl = aromatic neighbor of C_oxime; C_allyl = non-aromatic neighbor.
-    Returns None if the pattern is not found or neighbors are ambiguous.
-    """
     match = mol.GetSubstructMatch(OXIME_PAT)
     if not match:
         return None
     cox_idx, nox_idx, oox_idx = match
-
     c_aryl_idx = c_allyl_idx = None
     for nbr in mol.GetAtomWithIdx(cox_idx).GetNeighbors():
         if nbr.GetIdx() == nox_idx:
@@ -54,7 +47,6 @@ def get_oxime_atoms(mol: Chem.Mol):
             c_aryl_idx = nbr.GetIdx()
         else:
             c_allyl_idx = nbr.GetIdx()
-
     if c_aryl_idx is None or c_allyl_idx is None:
         return None
     return cox_idx, nox_idx, oox_idx, c_aryl_idx, c_allyl_idx
@@ -67,15 +59,14 @@ def predict(d_aryl: float, d_allyl: float) -> str:
         return 'R'
     if allyl_anti and not aryl_anti:
         return 'F'
-    if aryl_anti and allyl_anti:        # both anti: pick the more anti one
+    if aryl_anti and allyl_anti:
         return 'R' if d_aryl >= d_allyl else 'F'
     return 'inspect'
 
 
 def mol_to_xyz(mol: Chem.Mol, title: str) -> str:
-    conf = mol.GetConformer()
-    n    = mol.GetNumAtoms()
-    lines = [str(n), title]
+    conf  = mol.GetConformer()
+    lines = [str(mol.GetNumAtoms()), title]
     for atom in mol.GetAtoms():
         p = conf.GetAtomPosition(atom.GetIdx())
         lines.append(f"{atom.GetSymbol():<3}  {p.x:>12.6f}  {p.y:>12.6f}  {p.z:>12.6f}")
@@ -95,20 +86,20 @@ FIELDS = [
 
 
 def main() -> None:
-    root      = Path(__file__).parent.parent
+    root      = Path(__file__).parent.parent.parent
     sdf_path  = root / 'data' / 'output' / 'aimnet_optimized' / 'best_aimnet_optimized.sdf'
     meta_path = root / 'data' / 'input'  / 'benchmark_meta.json'
-    csv_out   = root / 'data' / 'output' / 'week1_benchmark_results.csv'
-    xyz_root  = root / 'data' / 'output' / 'week1_activated_oximes'
+    out_dir   = root / 'data' / 'output' / 'analysis'
+    csv_out   = out_dir / 'classical_rule_results.csv'
+    xyz_root  = out_dir / 'classical_rule_xyz'
 
     if not sdf_path.exists():
-        raise FileNotFoundError(f"No optimized SDF found: {sdf_path}\nRun scripts 01 and 02 first.")
+        raise FileNotFoundError(f"Run scripts 01 and 02 first: {sdf_path}")
     if not meta_path.exists():
-        raise FileNotFoundError(f"No benchmark metadata: {meta_path}\nRun 00_benchmark_to_oximes.py first.")
+        raise FileNotFoundError(f"Run 00_benchmark_to_oximes.py first: {meta_path}")
 
     meta: dict = json.load(open(meta_path))
 
-    # Load all optimized structures
     suppl = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
     structures: dict[str, Chem.Mol] = {}
     for mol in suppl:
@@ -116,7 +107,6 @@ def main() -> None:
             continue
         structures[mol.GetProp('_Name')] = mol
 
-    # Group names by parent molecule: mol_001_E / mol_001_Z → mol_001
     parents: dict[str, dict[str, str]] = {}
     for name in structures:
         parts  = name.rsplit('_', 1)
@@ -159,7 +149,6 @@ def main() -> None:
         best_mol = e_mols[lowest_ez]
         conf     = best_mol.GetConformer()
 
-        # Write per-molecule xyz files
         mol_dir = xyz_root / parent
         mol_dir.mkdir(parents=True, exist_ok=True)
         for ez, mol in e_mols.items():
@@ -169,14 +158,13 @@ def main() -> None:
 
         atom_ids = get_oxime_atoms(best_mol)
         if atom_ids is None:
-            row['notes']        = 'oxime atoms not identified'
+            row['notes']         = 'oxime atoms not identified'
             row['beckmann_pred'] = 'inspect'
-            row['agreement']    = 'unclear'
+            row['agreement']     = 'unclear'
             rows.append(row)
             continue
 
         cox_idx, nox_idx, oox_idx, c_aryl_idx, c_allyl_idx = atom_ids
-        # Store 1-based indices (matching Gaussian/NBO convention)
         row['c_ox_idx']    = cox_idx    + 1
         row['n_ox_idx']    = nox_idx    + 1
         row['o_ox_idx']    = oox_idx    + 1
@@ -204,7 +192,7 @@ def main() -> None:
               f"d_aryl={d_aryl:.1f}°  d_allyl={d_allyl:.1f}°  "
               f"pred={pred}  exp={exp}  → {row['agreement']}")
 
-    csv_out.parent.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
     with open(csv_out, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=FIELDS)
         writer.writeheader()
@@ -215,8 +203,8 @@ def main() -> None:
     disagree= sum(1 for r in rows if r['agreement'] == 'no')
     inspect = sum(1 for r in rows if r['agreement'] in ('inspect', 'unclear'))
     print(f"\nResults  → {csv_out}")
-    print(f"Xyz files→ {xyz_root}/mol_XXX/")
     print(f"Summary: {total} molecules | agree {agree} | disagree {disagree} | inspect {inspect}")
+    print(f"Classical rule accuracy: {agree}/{total} ({100*agree/total:.0f}%)")
 
 
 if __name__ == '__main__':

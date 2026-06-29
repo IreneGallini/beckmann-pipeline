@@ -10,12 +10,13 @@ beckmann-pipeline/
 │   ├── 00_benchmark_to_oximes.py   ketone SMILES → protonated activated oximes (E/Z)
 │   ├── 01_smiles_to_conformers.py  Auto3D conformer generation + AIMNet2 ranking
 │   ├── 02_select_and_optimize.py   AIMNet2/ASE geometry optimisation
-│   ├── 04_extract_dihedrals_and_predict.py  dihedral analysis + benchmark
-│   └── dft/
-│       ├── prepare_sp.py           single-point NBO inputs (all 34 molecules)
-│       ├── prepare_opt.py          two-stage opt→NBO inputs (test set)
-│       ├── hpc_sync.py             upload/submit/download for Citadel
-│       └── parse_nbo.py            NBO output parser (in development)
+│   ├── dft/
+│   │   ├── prepare_sp.py           single-point NBO inputs (all 34 molecules)
+│   │   ├── prepare_opt.py          two-stage opt→NBO inputs (test set)
+│   │   ├── hpc_sync.py             upload/submit/download for Citadel
+│   │   └── parse_nbo.py            NBO output parser (in development)
+│   └── analysis/
+│       └── classical_rule_benchmark.py  baseline: does the geometric rule work?
 ├── data/
 │   ├── input/
 │   │   ├── benchmark.csv           34 ketones with experimental R/F outcomes
@@ -47,7 +48,6 @@ Python 3.11. `KMP_DUPLICATE_LIB_OK=TRUE` is set automatically by all scripts (re
 python scripts/00_benchmark_to_oximes.py   # ketones → oximes
 python scripts/01_smiles_to_conformers.py  # conformer generation
 python scripts/02_select_and_optimize.py   # AIMNet2 geometry opt
-python scripts/04_extract_dihedrals_and_predict.py  # dihedral benchmark
 ```
 
 DFT phase — prepare inputs, then use `hpc_sync.py` to submit to Citadel:
@@ -59,6 +59,16 @@ python scripts/dft/prepare_sp.py
 # Option B: DFT geometry opt then NBO (test set: 002, 006, 020, 021)
 python scripts/dft/prepare_opt.py
 ```
+
+## Baseline analysis
+
+`scripts/analysis/classical_rule_benchmark.py` tests whether the classical anti-periplanar dihedral rule alone can predict rearrangement vs. fragmentation. It is a one-off analysis to motivate the DFT/NBO approach — not a step that runs on new molecules.
+
+```bash
+python scripts/analysis/classical_rule_benchmark.py
+```
+
+Output: `data/output/analysis/classical_rule_results.csv`
 
 ## DFT output files
 
