@@ -123,6 +123,6 @@ python -m pytest tests/ -v -s
 
 Tests cover: imports, conformer count (≤5 per molecule), AIMNet2 energy decrease, RMSD check, `.gjf` charge (+1), oxime atom map consistency.
 
-## Benchmark results (week 1)
+## Baseline result
 
-The classical antiperiplanar dihedral rule (≥150° = anti → that group migrates) gave **20/34 correct predictions (59%)** on the benchmark set. Failures concentrate in substrates where aryl is geometrically anti but fragmentation dominates — consistent with ground-state orbital character (CN-handoff) governing selectivity beyond geometry alone.
+The classical anti-periplanar dihedral rule gives **20/34 correct predictions (59%)** on the benchmark set. Failures concentrate in substrates where aryl is geometrically anti but fragmentation dominates — consistent with ground-state orbital character (CN-handoff) governing selectivity beyond geometry alone. This motivates the DFT/NBO phase.
