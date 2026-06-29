@@ -2,23 +2,27 @@
 Step 5 (test set): Prepare two-stage Gaussian input files for DFT geometry
 optimisation + NBO analysis.
 
-For molecules 002, 007, 020, 021 (E and Z isomers), generates two jobs per
-structure:
+For molecules 002, 006, 020, 021 (E and Z isomers), generates two .gjf files
+per structure in data/output/dft_opt_test/{name}/:
 
-  Stage 1 — {name}_opt.gjf / {name}_opt_submit.sh
+  Stage 1 — {name}_opt.gjf
       wB97XD/6-311+G(d,p) opt
       Starting geometry: AIMNet2-optimised coordinates from best_aimnet_optimized.sdf
       Output: {name}_opt.chk  (contains DFT-optimised geometry)
 
-  Stage 2 — {name}_nbo.gjf / {name}_nbo_submit.sh
+  Stage 2 — {name}_nbo.gjf
       wB97XD/6-311+G(d,p) sp pop=nboread geom=checkpoint guess=read
       Reads geometry from {name}_opt.chk — run AFTER Stage 1 completes
-      Output: NBO7 donor/acceptor table, Wiberg bond indices, NBO summary
 
-These are separate jobs so that a NBO7 failure (which is not uncommon) does
-not destroy the optimised geometry already stored in the checkpoint.
+These are separate jobs so that a NBO7 failure does not destroy the optimised
+geometry already stored in the checkpoint.
 
-Output: data/output/dft_opt_test/{name}/
+Submission on Citadel (no SLURM — use hpc_sync.py):
+  python scripts/hpc_sync.py --mol 002 upload
+  python scripts/hpc_sync.py --mol 002 submit-opt
+  python scripts/hpc_sync.py status
+  python scripts/hpc_sync.py --mol 002 submit-nbo   # after Stage 1 finishes
+  python scripts/hpc_sync.py --mol 002 download
 """
 
 import warnings
@@ -79,24 +83,6 @@ def _nbo_gjf(name: str, oxime_label: str) -> str:
     )
 
 
-def _slurm(name: str, gjf: str, job_label: str) -> str:
-    job_name = f"{name}_{job_label}"
-    return (
-        "#!/bin/bash\n"
-        f"#SBATCH --job-name={job_name}\n"
-        "#SBATCH --nodes=1\n"
-        "#SBATCH --ntasks=1\n"
-        f"#SBATCH --cpus-per-task={NPROC}\n"
-        f"#SBATCH --mem={MEM_GB}GB\n"
-        "#SBATCH --time=24:00:00\n"
-        f"#SBATCH --output={job_name}_%j.out\n"
-        f"#SBATCH --error={job_name}_%j.err\n"
-        "# Adjust module name and --partition / --account for your cluster:\n"
-        "module load gaussian/16\n"
-        "\n"
-        f"g16 < {gjf} > {name}_{job_label}.log\n"
-    )
-
 
 def main() -> None:
     root   = Path(__file__).parent.parent
@@ -132,54 +118,20 @@ def main() -> None:
         mol_dir = outdir / name
         mol_dir.mkdir(exist_ok=True)
 
-        opt_gjf  = f"{name}_opt.gjf"
-        nbo_gjf  = f"{name}_nbo.gjf"
-
-        (mol_dir / opt_gjf).write_text(_opt_gjf(name, coords, oxime_label))
-        (mol_dir / nbo_gjf).write_text(_nbo_gjf(name, oxime_label))
-        (mol_dir / f"{name}_opt_submit.sh").write_text(_slurm(name, opt_gjf, "opt"))
-        (mol_dir / f"{name}_nbo_submit.sh").write_text(_slurm(name, nbo_gjf, "nbo"))
-
+        (mol_dir / f"{name}_opt.gjf").write_text(_opt_gjf(name, coords, oxime_label))
+        (mol_dir / f"{name}_nbo.gjf").write_text(_nbo_gjf(name, oxime_label))
         print(f"  {name:<24} {len(coords):>5}  {oxime_label:>20}   ✓      ✓")
-
-    # Two-stage cluster submission guide
-    guide = (
-        "#!/bin/bash\n"
-        "# Two-stage submission for DFT test set.\n"
-        "# Run from the dft_opt_test/ directory on the HPC cluster.\n"
-        "#\n"
-        "# Stage 1: submit all optimisations\n"
-        "for dir in */; do\n"
-        '    name="${dir%/}"\n'
-        '    cd "$dir" && sbatch "${name}_opt_submit.sh" && cd ..\n'
-        "done\n"
-        "#\n"
-        "# Stage 2: after ALL Stage 1 jobs finish, submit NBO single-points\n"
-        "# (the _nbo.gjf reads the .chk from Stage 1, so Stage 1 must complete first)\n"
-        "for dir in */; do\n"
-        '    name="${dir%/}"\n'
-        '    cd "$dir" && sbatch "${name}_nbo_submit.sh" && cd ..\n'
-        "done\n"
-    )
-    (outdir / "submit_stages.sh").write_text(guide)
 
     print(f"\n{len(test_mols)} structures written to {outdir}")
     print("\nFiles per molecule:")
-    print("  {name}_opt.gjf         Stage 1 — DFT geometry optimisation")
-    print("  {name}_nbo.gjf         Stage 2 — NBO single-point (reads opt .chk)")
-    print("  {name}_opt_submit.sh   SLURM script for Stage 1")
-    print("  {name}_nbo_submit.sh   SLURM script for Stage 2")
-    print("\nSubmission workflow (on cluster):")
-    print("  scp -r data/output/dft_opt_test/ user@cluster:~/beckmann/")
-    print("  cd ~/beckmann/dft_opt_test")
-    print("  # Submit Stage 1 (opt) for all 8 structures:")
-    print("  for dir in */; do name=${dir%/}; cd $dir && sbatch ${name}_opt_submit.sh && cd ..; done")
-    print("  # After Stage 1 finishes, submit Stage 2 (NBO):")
-    print("  for dir in */; do name=${dir%/}; cd $dir && sbatch ${name}_nbo_submit.sh && cd ..; done")
-    print("\nFrom the NBO .log files you will want to parse:")
-    print("  - 'NATURAL BOND ORBITALS' section (orbital character, e.g. CN-handoff)")
-    print("  - 'E2PERT' table (donor→acceptor perturbation energies, key for σ* analysis)")
-    print("  - 'BNDIDX' table (Wiberg bond indices for N-O, C=N, migrating C-C)")
+    print("  {name}_opt.gjf   Stage 1 — DFT geometry optimisation")
+    print("  {name}_nbo.gjf   Stage 2 — NBO single-point (reads opt .chk)")
+    print("\nSubmit on Citadel via hpc_sync.py:")
+    print("  python scripts/hpc_sync.py --mol 002 upload")
+    print("  python scripts/hpc_sync.py --mol 002 submit-opt")
+    print("  python scripts/hpc_sync.py status")
+    print("  python scripts/hpc_sync.py --mol 002 submit-nbo  # after Stage 1 finishes")
+    print("  python scripts/hpc_sync.py --mol 002 download")
 
 
 if __name__ == "__main__":

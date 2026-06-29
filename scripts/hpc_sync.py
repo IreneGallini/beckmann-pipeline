@@ -1,24 +1,39 @@
 #!/usr/bin/env python3
 """
-HPC synchronisation tool for Gaussian 16 DFT jobs.
+HPC synchronisation tool for Gaussian 16 DFT jobs on Citadel.
 
-Workflow (two-stage):
-  1. python scripts/hpc_sync.py upload         # push input files to cluster
-  2. python scripts/hpc_sync.py submit-opt     # Stage 1: geometry optimisation
-     ... wait for Stage 1 jobs to finish ...
-     python scripts/hpc_sync.py status         # check squeue --me
-  3. python scripts/hpc_sync.py submit-nbo     # Stage 2: NBO single-point
-     ... wait for Stage 2 jobs to finish ...
-  4. python scripts/hpc_sync.py download       # pull *.log files back
+Citadel (citadel.chem.cmu.edu) is a shared Ubuntu compute server — no SLURM.
+Gaussian 16 is at /opt/g16/g16. Jobs run via nohup and survive disconnection.
 
-Configuration:
-  Copy .env.example to .env and fill in:
-    HPC_HOST       e.g. igallini@submit.cluster.edu
-                   or an alias from ~/.ssh/config
-    HPC_REMOTE_DIR e.g. ~/beckmann/dft_opt_test
+Two job types are supported:
+  Two-stage (dft_opt_test/):  submit-opt → submit-nbo
+    Used for DFT geometry optimisation followed by NBO single-point.
+    Input files: {name}_opt.gjf and {name}_nbo.gjf
+  Single-point (dft_inputs/): submit-sp
+    Used for NBO single-point directly on AIMNet2 geometry.
+    Input files: {name}.gjf
 
-Credentials are never stored in committed code. All commands are printed
-before execution. Use --dry-run to preview without executing.
+Typical two-stage workflow:
+  python scripts/hpc_sync.py --mol 002 upload
+  python scripts/hpc_sync.py --mol 002 submit-opt
+  python scripts/hpc_sync.py status
+  python scripts/hpc_sync.py --mol 002 submit-nbo   # after Stage 1 finishes
+  python scripts/hpc_sync.py --mol 002 download
+
+For dft_inputs/ (single-point jobs):
+  python scripts/hpc_sync.py --dir data/output/dft_inputs upload
+  python scripts/hpc_sync.py --dir data/output/dft_inputs submit-sp
+  python scripts/hpc_sync.py --dir data/output/dft_inputs download
+
+Flags (must come BEFORE the subcommand):
+  --mol 002     target mol_002_E and mol_002_Z only
+  --dir PATH    local directory to sync (default: data/output/dft_opt_test)
+  --dry-run     print commands without executing
+
+Configuration — copy .env.example to .env (gitignored) and fill in:
+  HPC_HOST       igallini@citadel.chem.cmu.edu
+  HPC_REMOTE_DIR ~/beckmann/dft_opt_test
+  G16_PATH       /opt/g16/g16
 """
 
 import argparse
@@ -27,9 +42,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-PROJECT_ROOT  = Path(__file__).parent.parent
-LOCAL_DFT_DIR = PROJECT_ROOT / "data" / "output" / "dft_opt_test"
-ENV_FILE      = PROJECT_ROOT / ".env"
+PROJECT_ROOT          = Path(__file__).parent.parent
+DEFAULT_LOCAL_DFT_DIR = PROJECT_ROOT / "data" / "output" / "dft_opt_test"
+ENV_FILE              = PROJECT_ROOT / ".env"
 
 
 def load_config() -> dict:
@@ -42,21 +57,32 @@ def load_config() -> dict:
                 continue
             key, _, value = line.partition("=")
             config[key.strip()] = value.strip()
-    for key in ("HPC_HOST", "HPC_REMOTE_DIR"):
+    for key in ("HPC_HOST", "HPC_REMOTE_DIR", "G16_PATH"):
         if key in os.environ:
             config[key] = os.environ[key]
     return config
 
 
 def require_config(config: dict) -> None:
-    missing = [k for k in ("HPC_HOST", "HPC_REMOTE_DIR") if not config.get(k)]
+    missing = [k for k in ("HPC_HOST", "HPC_REMOTE_DIR", "G16_PATH") if not config.get(k)]
     if missing:
         print(f"ERROR: missing config: {', '.join(missing)}", file=sys.stderr)
-        print("  1. Copy .env.example to .env", file=sys.stderr)
-        print("  2. Set HPC_HOST=username@cluster.hostname", file=sys.stderr)
-        print("  3. Set HPC_REMOTE_DIR=~/beckmann/dft_opt_test", file=sys.stderr)
-        print("  Or: export HPC_HOST=... before running this script.", file=sys.stderr)
+        print("  1. Copy .env.example to .env and fill in all values", file=sys.stderr)
+        print("  2. HPC_HOST=username@hostname", file=sys.stderr)
+        print("  3. HPC_REMOTE_DIR=~/beckmann/dft_opt_test", file=sys.stderr)
+        print("  4. G16_PATH=/opt/g16/g16  (full path to g16 on the server)", file=sys.stderr)
         sys.exit(1)
+
+
+def mol_dirs(local_dir: Path, mol: str | None) -> list[Path]:
+    """Return local molecule directories to operate on."""
+    if mol:
+        dirs = sorted(local_dir.glob(f"mol_{mol.zfill(3)}_*/"))
+        if not dirs:
+            print(f"ERROR: no directories found for mol {mol} in {local_dir}", file=sys.stderr)
+            sys.exit(1)
+        return dirs
+    return sorted(local_dir.glob("mol_*/"))
 
 
 def run(cmd: list[str], dry_run: bool) -> None:
@@ -71,49 +97,57 @@ def run(cmd: list[str], dry_run: bool) -> None:
         sys.exit(result.returncode)
 
 
-def cmd_upload(config: dict, dry_run: bool) -> None:
-    """Upload data/output/dft_opt_test/ to the cluster."""
-    if not LOCAL_DFT_DIR.exists():
-        print(
-            f"ERROR: {LOCAL_DFT_DIR} does not exist.\n"
-            "Run: python scripts/05_prepare_test_opt.py first.",
-            file=sys.stderr,
-        )
+def cmd_upload(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
+    """Upload molecule directories to the cluster."""
+    if not local_dir.exists():
+        print(f"ERROR: {local_dir} does not exist.", file=sys.stderr)
         sys.exit(1)
 
     host       = config["HPC_HOST"]
     remote_dir = config["HPC_REMOTE_DIR"]
-    # e.g. ~/beckmann/dft_opt_test → ~/beckmann
-    remote_parent = str(Path(remote_dir).parent)
+    dirs       = mol_dirs(local_dir, mol)
 
-    print(f"\n-- Upload: {LOCAL_DFT_DIR}  →  {host}:{remote_dir}")
+    print(f"\n-- Upload: {', '.join(d.name for d in dirs)}  →  {host}:{remote_dir}/")
     run(["ssh", host, f"mkdir -p {remote_dir}"], dry_run)
-    # scp -r copies the directory by name into remote_parent/,
-    # creating remote_parent/dft_opt_test/ which matches HPC_REMOTE_DIR.
-    run(["scp", "-r", str(LOCAL_DFT_DIR), f"{host}:{remote_parent}/"], dry_run)
+
+    if mol:
+        for d in dirs:
+            run(["scp", "-r", str(d), f"{host}:{remote_dir}/"], dry_run)
+    else:
+        remote_parent = str(Path(remote_dir).parent)
+        run(["scp", "-r", str(local_dir), f"{host}:{remote_parent}/"], dry_run)
+
     print("\nUpload complete.")
 
 
-def cmd_submit_opt(config: dict, dry_run: bool) -> None:
-    """SSH into the cluster and sbatch all Stage 1 (opt) jobs."""
+def cmd_submit_opt(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
+    """SSH into the server and run Stage 1 (opt) jobs via nohup g16."""
     host       = config["HPC_HOST"]
     remote_dir = config["HPC_REMOTE_DIR"]
-    # Parenthesized subshell: each molecule's cd is isolated, so a sbatch
-    # failure does not corrupt the loop's working directory.
+    pattern    = f"mol_{mol.zfill(3)}_*" if mol else "*"
+    g16          = config["G16_PATH"]           # e.g. /opt/g16/g16
+    gauss_exedir = str(Path(g16).parent)        # e.g. /opt/g16
+    g16root      = str(Path(g16).parent.parent) # e.g. /opt
+    # Export Gaussian env vars explicitly — non-interactive SSH shells do not
+    # source ~/.bashrc so GAUSS_EXEDIR and g16root would otherwise be unset,
+    # causing g16 to segfault on startup.
+    # nohup + & runs each job in the background; jobs survive SSH disconnection.
     submit_cmd = (
-        f"cd {remote_dir} && "
-        "for dir in */; do "
+        f'export GAUSS_EXEDIR={gauss_exedir} && '
+        f'export g16root={g16root} && '
+        f'cd {remote_dir} && '
+        f'for dir in {pattern}/; do '
         '  name="${dir%/}"; '
-        '  (cd "$dir" && sbatch "${name}_opt_submit.sh"); '
-        "done"
+        f'  (cd "$dir" && nohup {g16} < "${{name}}_opt.gjf" > "${{name}}_opt.log" 2>&1 &); '
+        'done'
     )
-    print(f"\n-- Submitting Stage 1 (opt) jobs on {host}:{remote_dir}")
+    print(f"\n-- Launching Stage 1 (opt) jobs on {host}:{remote_dir}")
     run(["ssh", host, submit_cmd], dry_run)
-    print("\nStage 1 submitted. Monitor with:\n  python scripts/hpc_sync.py status")
+    print("\nStage 1 launched. Monitor with:\n  python scripts/hpc_sync.py status")
 
 
-def cmd_submit_nbo(config: dict, dry_run: bool) -> None:
-    """SSH into the cluster and sbatch all Stage 2 (NBO) jobs."""
+def cmd_submit_nbo(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
+    """SSH into the server and run Stage 2 (NBO) jobs via nohup g16."""
     host       = config["HPC_HOST"]
     remote_dir = config["HPC_REMOTE_DIR"]
     print(
@@ -121,44 +155,74 @@ def cmd_submit_nbo(config: dict, dry_run: bool) -> None:
         "         Only proceed once ALL opt jobs have COMPLETED.\n"
         "         Check first: python scripts/hpc_sync.py status"
     )
+    pattern      = f"mol_{mol.zfill(3)}_*" if mol else "*"
+    g16          = config["G16_PATH"]
+    gauss_exedir = str(Path(g16).parent)
+    g16root      = str(Path(g16).parent.parent)
     submit_cmd = (
-        f"cd {remote_dir} && "
-        "for dir in */; do "
+        f'export GAUSS_EXEDIR={gauss_exedir} && '
+        f'export g16root={g16root} && '
+        f'cd {remote_dir} && '
+        f'for dir in {pattern}/; do '
         '  name="${dir%/}"; '
-        '  (cd "$dir" && sbatch "${name}_nbo_submit.sh"); '
-        "done"
+        f'  (cd "$dir" && nohup {g16} < "${{name}}_nbo.gjf" > "${{name}}_nbo.log" 2>&1 &); '
+        'done'
     )
-    print(f"\n-- Submitting Stage 2 (NBO) jobs on {host}:{remote_dir}")
+    print(f"\n-- Launching Stage 2 (NBO) jobs on {host}:{remote_dir}")
     run(["ssh", host, submit_cmd], dry_run)
-    print("\nStage 2 submitted. Monitor with:\n  python scripts/hpc_sync.py status")
+    print("\nStage 2 launched. Monitor with:\n  python scripts/hpc_sync.py status")
 
 
-def cmd_download(config: dict, dry_run: bool) -> None:
-    """Download *.log files from the cluster into data/output/dft_opt_test/."""
+def cmd_submit_sp(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
+    """SSH into the server and run single-point NBO jobs (dft_inputs/ style)."""
     host       = config["HPC_HOST"]
     remote_dir = config["HPC_REMOTE_DIR"]
-    LOCAL_DFT_DIR.mkdir(parents=True, exist_ok=True)
-    print(f"\n-- Downloading *.log from {host}:{remote_dir}/")
-    # rsync filter order matters: allow dirs, allow *.log, exclude everything else.
+    pattern    = f"mol_{mol.zfill(3)}_*" if mol else "*"
+    g16          = config["G16_PATH"]
+    gauss_exedir = str(Path(g16).parent)
+    g16root      = str(Path(g16).parent.parent)
+    submit_cmd = (
+        f'export GAUSS_EXEDIR={gauss_exedir} && '
+        f'export g16root={g16root} && '
+        f'cd {remote_dir} && '
+        f'for dir in {pattern}/; do '
+        '  name="${dir%/}"; '
+        f'  (cd "$dir" && nohup {g16} < "${{name}}.gjf" > "${{name}}.log" 2>&1 &); '
+        'done'
+    )
+    print(f"\n-- Launching single-point jobs on {host}:{remote_dir}")
+    run(["ssh", host, submit_cmd], dry_run)
+    print("\nJobs launched. Monitor with:\n  python scripts/hpc_sync.py status")
+
+
+def cmd_download(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
+    """Download *.log files from the cluster into the local directory."""
+    host       = config["HPC_HOST"]
+    remote_dir = config["HPC_REMOTE_DIR"]
+    local_dir.mkdir(parents=True, exist_ok=True)
+
+    pattern = f"mol_{mol.zfill(3)}_*" if mol else "*"
+    print(f"\n-- Downloading *.log ({pattern}) from {host}:{remote_dir}/")
     run([
         "rsync", "-avz",
+        f"--filter=+ {pattern}/",
         "--include=*/",
         "--include=*.log",
         "--exclude=*",
         f"{host}:{remote_dir}/",
-        str(LOCAL_DFT_DIR) + "/",
+        str(local_dir) + "/",
     ], dry_run)
     print(
-        f"\nLogs written to {LOCAL_DFT_DIR}/\n"
+        f"\nLogs written to {local_dir}/\n"
         "Note: *.log is gitignored — these files will not be committed."
     )
 
 
-def cmd_status(config: dict, dry_run: bool) -> None:
-    """Show the current SLURM queue for this user."""
+def cmd_status(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
+    """Show running g16 processes on the server."""
     host = config["HPC_HOST"]
-    print(f"\n-- SLURM queue on {host}")
-    run(["ssh", host, "squeue --me"], dry_run)
+    print(f"\n-- Running g16 processes on {host}")
+    run(["ssh", host, "ps aux | grep '[g]16' | awk '{print $1, $2, $11, $12}'"], dry_run)
 
 
 def main() -> None:
@@ -166,30 +230,49 @@ def main() -> None:
         description="HPC sync tool for Gaussian DFT jobs.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            "examples:\n"
-            "  python scripts/hpc_sync.py --dry-run upload\n"
-            "  python scripts/hpc_sync.py upload\n"
-            "  python scripts/hpc_sync.py submit-opt\n"
+            "examples (two-stage opt→nbo, dft_opt_test/):\n"
+            "  python scripts/hpc_sync.py --mol 002 --dry-run upload\n"
+            "  python scripts/hpc_sync.py --mol 002 upload\n"
+            "  python scripts/hpc_sync.py --mol 002 submit-opt\n"
             "  python scripts/hpc_sync.py status\n"
-            "  python scripts/hpc_sync.py submit-nbo\n"
-            "  python scripts/hpc_sync.py download\n"
-            "\nnote: --dry-run must come BEFORE the subcommand\n"
+            "  python scripts/hpc_sync.py --mol 002 submit-nbo\n"
+            "  python scripts/hpc_sync.py --mol 002 download\n"
+            "\nexamples (single-point, dft_inputs/):\n"
+            "  python scripts/hpc_sync.py --dir data/output/dft_inputs upload\n"
+            "  python scripts/hpc_sync.py --dir data/output/dft_inputs submit-sp\n"
+            "  python scripts/hpc_sync.py --dir data/output/dft_inputs download\n"
+            "\nnote: all flags (--mol, --dir, --dry-run) must come BEFORE the subcommand\n"
         ),
     )
     parser.add_argument(
         "--dry-run", action="store_true",
         help="Print every command that would run, but do not execute it.",
     )
+    parser.add_argument(
+        "--mol", metavar="ID",
+        help="Target a single molecule by ID (e.g. --mol 002). "
+             "Operates on both E and Z isomers. Omit to process all molecules.",
+    )
+    parser.add_argument(
+        "--dir", metavar="PATH", default=None,
+        help="Local job directory to sync (default: data/output/dft_opt_test). "
+             "Use data/output/dft_inputs for single-point jobs.",
+    )
 
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
     sub.required = True
-    sub.add_parser("upload",      help="Upload dft_opt_test/ to cluster")
-    sub.add_parser("submit-opt",  help="Submit Stage 1 geometry-opt jobs")
-    sub.add_parser("submit-nbo",  help="Submit Stage 2 NBO jobs (AFTER Stage 1 finishes)")
+    sub.add_parser("upload",      help="Upload molecule directories to cluster")
+    sub.add_parser("submit-opt",  help="Submit Stage 1 geometry-opt jobs ({name}_opt.gjf)")
+    sub.add_parser("submit-nbo",  help="Submit Stage 2 NBO jobs ({name}_nbo.gjf) — AFTER Stage 1 finishes")
+    sub.add_parser("submit-sp",   help="Submit single-point NBO jobs ({name}.gjf, for dft_inputs/)")
     sub.add_parser("download",    help="Download *.log files from cluster")
-    sub.add_parser("status",      help="Show SLURM queue (squeue --me)")
+    sub.add_parser("status",      help="Show running g16 processes on server")
 
     args = parser.parse_args()
+
+    local_dir = Path(args.dir) if args.dir else DEFAULT_LOCAL_DFT_DIR
+    if not local_dir.is_absolute():
+        local_dir = PROJECT_ROOT / local_dir
 
     config = load_config()
     require_config(config)
@@ -198,10 +281,11 @@ def main() -> None:
         "upload":     cmd_upload,
         "submit-opt": cmd_submit_opt,
         "submit-nbo": cmd_submit_nbo,
+        "submit-sp":  cmd_submit_sp,
         "download":   cmd_download,
         "status":     cmd_status,
     }
-    dispatch[args.command](config, args.dry_run)
+    dispatch[args.command](config, args.dry_run, args.mol, local_dir)
 
 
 if __name__ == "__main__":

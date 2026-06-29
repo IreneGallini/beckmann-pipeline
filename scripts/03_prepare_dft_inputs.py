@@ -2,15 +2,17 @@
 Step 3: Prepare Gaussian 16 input files for DFT/NBO7 analysis
 
 Reads best_aimnet_optimized.sdf and writes, for each structure:
-  - {mol_name}.gjf         Gaussian 16 input (single-point + NBO7)
-  - {mol_name}_submit.sh   SLURM job submission template
+  - {mol_name}.gjf    Gaussian 16 input (single-point + NBO7 on AIMNet2 geometry)
 
-Also writes data/output/dft_inputs/submit_all.sh to batch-submit from the cluster.
+Output: data/output/dft_inputs/
 
-HPC hand-off (manual):
-  scp -r data/output/dft_inputs/ user@cluster:~/beckmann/
-  cd ~/beckmann/dft_inputs && bash submit_all.sh
-  scp user@cluster:~/beckmann/dft_inputs/**/*.log data/output/dft_inputs/
+Submission on Citadel (shared server, no SLURM):
+  python scripts/hpc_sync.py --dir data/output/dft_inputs upload
+  python scripts/hpc_sync.py --dir data/output/dft_inputs submit-sp
+  python scripts/hpc_sync.py --dir data/output/dft_inputs download
+
+Note: for DFT geometry optimisation before NBO, use scripts/05_prepare_test_opt.py
+instead. That generates a two-stage opt→NBO workflow in data/output/dft_opt_test/.
 """
 
 import warnings
@@ -59,23 +61,6 @@ def _gjf(name: str, coords: list[tuple], oxime_label: str) -> str:
     return header + coord_block + nbo_block
 
 
-def _slurm(name: str) -> str:
-    return (
-        "#!/bin/bash\n"
-        f"#SBATCH --job-name={name}\n"
-        "#SBATCH --nodes=1\n"
-        "#SBATCH --ntasks=1\n"
-        f"#SBATCH --cpus-per-task={NPROC}\n"
-        f"#SBATCH --mem={MEM_GB}GB\n"
-        "#SBATCH --time=24:00:00\n"
-        f"#SBATCH --output={name}_%j.out\n"
-        f"#SBATCH --error={name}_%j.err\n"
-        "# Adjust the module name and add --partition / --account as needed:\n"
-        "module load gaussian/16\n"
-        "\n"
-        f"g16 < {name}.gjf > {name}.log\n"
-    )
-
 
 def main() -> None:
     root   = Path(__file__).parent.parent
@@ -111,28 +96,13 @@ def main() -> None:
         mol_dir.mkdir(exist_ok=True)
 
         (mol_dir / f"{name}.gjf").write_text(_gjf(name, coords, oxime_label))
-        (mol_dir / f"{name}_submit.sh").write_text(_slurm(name))
-
         print(f"  {name:<24} {len(coords):>5}  {oxime_label:>18}  ✓")
 
-    # Master submission script (run from dft_inputs/ on the cluster)
-    submit_all = (
-        "#!/bin/bash\n"
-        "# Run from the dft_inputs/ directory on the HPC cluster:\n"
-        "#   bash submit_all.sh\n"
-        "for dir in */; do\n"
-        '    name="${dir%/}"\n'
-        '    cd "$dir" && sbatch "${name}_submit.sh" && cd ..\n'
-        "done\n"
-    )
-    (outdir / "submit_all.sh").write_text(submit_all)
-
-    print(f"\n{len(mols)} input sets → {outdir}")
-    print(f"Master submission script → {outdir / 'submit_all.sh'}")
+    print(f"\n{len(mols)} .gjf files → {outdir}")
     print(
-        "\nTo transfer to HPC:\n"
-        f"  scp -r {outdir}/ user@cluster:~/beckmann/dft_inputs/\n"
-        "  cd ~/beckmann/dft_inputs && bash submit_all.sh"
+        "\nTo submit on Citadel:\n"
+        "  python scripts/hpc_sync.py --dir data/output/dft_inputs upload\n"
+        "  python scripts/hpc_sync.py --dir data/output/dft_inputs submit-sp"
     )
 
 
