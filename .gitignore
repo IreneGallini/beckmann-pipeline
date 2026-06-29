@@ -6,3 +6,4 @@ data/outputs/
 *.log
 BeckmanPrediction.cdxml
 Notes.md
+.env

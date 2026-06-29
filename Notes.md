@@ -100,5 +100,11 @@ Because the .gjf title already says [oxime: C3=N2-O1], you can write a parser th
 The connection to the tests
 
 test_step3_oxime_atom_map_matches_sdf closes the loop: it reads each .gjf back, re-runs the SMARTS match on the SDF molecule, and asserts that the label in the file equals the match result. This catches any future bug where, say, the coordinate ordering and the SMARTS match diverge.
+
+# Testing HPC steps
+Set of 5 and 6 membered substrates with methyl or methoxy substituents in position 4 
+- mols: 2, 6, 20, 21
+
+optimize then 5 point static scan
     
 
