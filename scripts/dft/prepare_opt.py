@@ -1,9 +1,8 @@
 """
-Step 5 (test set): Prepare two-stage Gaussian input files for DFT geometry
-optimisation + NBO analysis.
+Prepare two-stage Gaussian input files for DFT geometry optimisation + NBO analysis.
 
-For molecules 002, 006, 020, 021 (E and Z isomers), generates two .gjf files
-per structure in data/output/dft_opt_test/{name}/:
+For the test set (molecules 002, 006, 020, 021, E and Z isomers), generates
+two .gjf files per structure in data/output/dft_opt/{name}/:
 
   Stage 1 — {name}_opt.gjf
       wB97XD/6-311+G(d,p) opt
@@ -14,15 +13,15 @@ per structure in data/output/dft_opt_test/{name}/:
       wB97XD/6-311+G(d,p) sp pop=nboread geom=checkpoint guess=read
       Reads geometry from {name}_opt.chk — run AFTER Stage 1 completes
 
-These are separate jobs so that a NBO7 failure does not destroy the optimised
+These are separate jobs so a NBO7 failure does not destroy the optimised
 geometry already stored in the checkpoint.
 
-Submission on Citadel (no SLURM — use hpc_sync.py):
-  python scripts/hpc_sync.py --mol 002 upload
-  python scripts/hpc_sync.py --mol 002 submit-opt
-  python scripts/hpc_sync.py status
-  python scripts/hpc_sync.py --mol 002 submit-nbo   # after Stage 1 finishes
-  python scripts/hpc_sync.py --mol 002 download
+Submission on Citadel:
+  python scripts/dft/hpc_sync.py --mol 002 upload
+  python scripts/dft/hpc_sync.py --mol 002 submit-opt
+  python scripts/dft/hpc_sync.py status
+  python scripts/dft/hpc_sync.py --mol 002 submit-nbo   # after Stage 1 finishes
+  python scripts/dft/hpc_sync.py --mol 002 download
 """
 
 import warnings
@@ -33,12 +32,12 @@ from pathlib import Path
 from rdkit import Chem
 
 # ── Settings ──────────────────────────────────────────────────────────────────
-TEST_IDS     = {"002", "006", "020", "021"}   # mol IDs to process (zero-padded)
+TEST_IDS     = {"002", "006", "020", "021"}
 FUNCTIONAL   = "wB97XD"
 BASIS        = "6-311+G(d,p)"
 NPROC        = 8
 MEM_GB       = 16
-CHARGE       = 1    # protonated activated oxime (C=N-[OH2+])
+CHARGE       = 1
 MULTIPLICITY = 1
 NBO_KEYWORDS = "E2PERT BNDIDX NBOSUM"
 # ──────────────────────────────────────────────────────────────────────────────
@@ -83,17 +82,14 @@ def _nbo_gjf(name: str, oxime_label: str) -> str:
     )
 
 
-
 def main() -> None:
-    root   = Path(__file__).parent.parent
+    root   = Path(__file__).parent.parent.parent
     sdf    = root / "data" / "output" / "aimnet_optimized" / "best_aimnet_optimized.sdf"
-    outdir = root / "data" / "output" / "dft_opt_test"
+    outdir = root / "data" / "output" / "dft_opt"
     outdir.mkdir(parents=True, exist_ok=True)
 
     suppl = Chem.SDMolSupplier(str(sdf), removeHs=False)
     mols  = [m for m in suppl if m is not None]
-
-    # Filter to test set
     test_mols = [m for m in mols if m.GetProp("_Name").split("_")[1] in TEST_IDS]
 
     print(f"\n{'Name':<24} {'Atoms':>5}  {'Oxime':>20}  Stage1  Stage2")
@@ -102,12 +98,10 @@ def main() -> None:
     for mol in test_mols:
         name = mol.GetProp("_Name")
         conf = mol.GetConformer()
-
         coords = [
             (atom.GetSymbol(), *conf.GetAtomPosition(i))
             for i, atom in enumerate(mol.GetAtoms())
         ]
-
         match = mol.GetSubstructMatch(OXIME_PAT)
         if match:
             ci, ni, oi = (idx + 1 for idx in match)
@@ -117,21 +111,17 @@ def main() -> None:
 
         mol_dir = outdir / name
         mol_dir.mkdir(exist_ok=True)
-
         (mol_dir / f"{name}_opt.gjf").write_text(_opt_gjf(name, coords, oxime_label))
         (mol_dir / f"{name}_nbo.gjf").write_text(_nbo_gjf(name, oxime_label))
         print(f"  {name:<24} {len(coords):>5}  {oxime_label:>20}   ✓      ✓")
 
     print(f"\n{len(test_mols)} structures written to {outdir}")
-    print("\nFiles per molecule:")
-    print("  {name}_opt.gjf   Stage 1 — DFT geometry optimisation")
-    print("  {name}_nbo.gjf   Stage 2 — NBO single-point (reads opt .chk)")
     print("\nSubmit on Citadel via hpc_sync.py:")
-    print("  python scripts/hpc_sync.py --mol 002 upload")
-    print("  python scripts/hpc_sync.py --mol 002 submit-opt")
-    print("  python scripts/hpc_sync.py status")
-    print("  python scripts/hpc_sync.py --mol 002 submit-nbo  # after Stage 1 finishes")
-    print("  python scripts/hpc_sync.py --mol 002 download")
+    print("  python scripts/dft/hpc_sync.py --mol 002 upload")
+    print("  python scripts/dft/hpc_sync.py --mol 002 submit-opt")
+    print("  python scripts/dft/hpc_sync.py status")
+    print("  python scripts/dft/hpc_sync.py --mol 002 submit-nbo")
+    print("  python scripts/dft/hpc_sync.py --mol 002 download")
 
 
 if __name__ == "__main__":

@@ -6,33 +6,33 @@ Citadel (citadel.chem.cmu.edu) is a shared Ubuntu compute server — no SLURM.
 Gaussian 16 is at /opt/g16/g16. Jobs run via nohup and survive disconnection.
 
 Two job types are supported:
-  Two-stage (dft_opt_test/):  submit-opt → submit-nbo
+  Two-stage (dft_opt/):  submit-opt → submit-nbo
     Used for DFT geometry optimisation followed by NBO single-point.
     Input files: {name}_opt.gjf and {name}_nbo.gjf
-  Single-point (dft_inputs/): submit-sp
+  Single-point (dft_sp/): submit-sp
     Used for NBO single-point directly on AIMNet2 geometry.
     Input files: {name}.gjf
 
 Typical two-stage workflow:
-  python scripts/hpc_sync.py --mol 002 upload
-  python scripts/hpc_sync.py --mol 002 submit-opt
-  python scripts/hpc_sync.py status
-  python scripts/hpc_sync.py --mol 002 submit-nbo   # after Stage 1 finishes
-  python scripts/hpc_sync.py --mol 002 download
+  python scripts/dft/hpc_sync.py --mol 002 upload
+  python scripts/dft/hpc_sync.py --mol 002 submit-opt
+  python scripts/dft/hpc_sync.py status
+  python scripts/dft/hpc_sync.py --mol 002 submit-nbo   # after Stage 1 finishes
+  python scripts/dft/hpc_sync.py --mol 002 download
 
-For dft_inputs/ (single-point jobs):
-  python scripts/hpc_sync.py --dir data/output/dft_inputs upload
-  python scripts/hpc_sync.py --dir data/output/dft_inputs submit-sp
-  python scripts/hpc_sync.py --dir data/output/dft_inputs download
+For dft_sp/ (single-point jobs):
+  python scripts/dft/hpc_sync.py --dir data/output/dft_sp upload
+  python scripts/dft/hpc_sync.py --dir data/output/dft_sp submit-sp
+  python scripts/dft/hpc_sync.py --dir data/output/dft_sp download
 
 Flags (must come BEFORE the subcommand):
   --mol 002     target mol_002_E and mol_002_Z only
-  --dir PATH    local directory to sync (default: data/output/dft_opt_test)
+  --dir PATH    local directory to sync (default: data/output/dft_opt)
   --dry-run     print commands without executing
 
 Configuration — copy .env.example to .env (gitignored) and fill in:
   HPC_HOST       igallini@citadel.chem.cmu.edu
-  HPC_REMOTE_DIR ~/beckmann/dft_opt_test
+  HPC_REMOTE_DIR ~/beckmann/dft_opt
   G16_PATH       /opt/g16/g16
 """
 
@@ -42,8 +42,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-PROJECT_ROOT          = Path(__file__).parent.parent
-DEFAULT_LOCAL_DFT_DIR = PROJECT_ROOT / "data" / "output" / "dft_opt_test"
+PROJECT_ROOT          = Path(__file__).parent.parent.parent
+DEFAULT_LOCAL_DFT_DIR = PROJECT_ROOT / "data" / "output" / "dft_opt"
 ENV_FILE              = PROJECT_ROOT / ".env"
 
 
@@ -69,7 +69,7 @@ def require_config(config: dict) -> None:
         print(f"ERROR: missing config: {', '.join(missing)}", file=sys.stderr)
         print("  1. Copy .env.example to .env and fill in all values", file=sys.stderr)
         print("  2. HPC_HOST=username@hostname", file=sys.stderr)
-        print("  3. HPC_REMOTE_DIR=~/beckmann/dft_opt_test", file=sys.stderr)
+        print("  3. HPC_REMOTE_DIR=~/beckmann/dft_opt", file=sys.stderr)
         print("  4. G16_PATH=/opt/g16/g16  (full path to g16 on the server)", file=sys.stderr)
         sys.exit(1)
 
@@ -125,13 +125,12 @@ def cmd_submit_opt(config: dict, dry_run: bool, mol: str | None, local_dir: Path
     host       = config["HPC_HOST"]
     remote_dir = config["HPC_REMOTE_DIR"]
     pattern    = f"mol_{mol.zfill(3)}_*" if mol else "*"
-    g16          = config["G16_PATH"]           # e.g. /opt/g16/g16
-    gauss_exedir = str(Path(g16).parent)        # e.g. /opt/g16
-    g16root      = str(Path(g16).parent.parent) # e.g. /opt
+    g16          = config["G16_PATH"]
+    gauss_exedir = str(Path(g16).parent)
+    g16root      = str(Path(g16).parent.parent)
     # Export Gaussian env vars explicitly — non-interactive SSH shells do not
     # source ~/.bashrc so GAUSS_EXEDIR and g16root would otherwise be unset,
     # causing g16 to segfault on startup.
-    # nohup + & runs each job in the background; jobs survive SSH disconnection.
     submit_cmd = (
         f'export GAUSS_EXEDIR={gauss_exedir} && '
         f'export g16root={g16root} && '
@@ -143,7 +142,7 @@ def cmd_submit_opt(config: dict, dry_run: bool, mol: str | None, local_dir: Path
     )
     print(f"\n-- Launching Stage 1 (opt) jobs on {host}:{remote_dir}")
     run(["ssh", host, submit_cmd], dry_run)
-    print("\nStage 1 launched. Monitor with:\n  python scripts/hpc_sync.py status")
+    print("\nStage 1 launched. Monitor with:\n  python scripts/dft/hpc_sync.py status")
 
 
 def cmd_submit_nbo(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
@@ -153,7 +152,7 @@ def cmd_submit_nbo(config: dict, dry_run: bool, mol: str | None, local_dir: Path
     print(
         "\nWARNING: NBO jobs read the .chk written by Stage 1.\n"
         "         Only proceed once ALL opt jobs have COMPLETED.\n"
-        "         Check first: python scripts/hpc_sync.py status"
+        "         Check first: python scripts/dft/hpc_sync.py status"
     )
     pattern      = f"mol_{mol.zfill(3)}_*" if mol else "*"
     g16          = config["G16_PATH"]
@@ -170,11 +169,11 @@ def cmd_submit_nbo(config: dict, dry_run: bool, mol: str | None, local_dir: Path
     )
     print(f"\n-- Launching Stage 2 (NBO) jobs on {host}:{remote_dir}")
     run(["ssh", host, submit_cmd], dry_run)
-    print("\nStage 2 launched. Monitor with:\n  python scripts/hpc_sync.py status")
+    print("\nStage 2 launched. Monitor with:\n  python scripts/dft/hpc_sync.py status")
 
 
 def cmd_submit_sp(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
-    """SSH into the server and run single-point NBO jobs (dft_inputs/ style)."""
+    """SSH into the server and run single-point NBO jobs (dft_sp/ style)."""
     host       = config["HPC_HOST"]
     remote_dir = config["HPC_REMOTE_DIR"]
     pattern    = f"mol_{mol.zfill(3)}_*" if mol else "*"
@@ -192,7 +191,7 @@ def cmd_submit_sp(config: dict, dry_run: bool, mol: str | None, local_dir: Path)
     )
     print(f"\n-- Launching single-point jobs on {host}:{remote_dir}")
     run(["ssh", host, submit_cmd], dry_run)
-    print("\nJobs launched. Monitor with:\n  python scripts/hpc_sync.py status")
+    print("\nJobs launched. Monitor with:\n  python scripts/dft/hpc_sync.py status")
 
 
 def cmd_download(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
@@ -230,17 +229,17 @@ def main() -> None:
         description="HPC sync tool for Gaussian DFT jobs.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            "examples (two-stage opt→nbo, dft_opt_test/):\n"
-            "  python scripts/hpc_sync.py --mol 002 --dry-run upload\n"
-            "  python scripts/hpc_sync.py --mol 002 upload\n"
-            "  python scripts/hpc_sync.py --mol 002 submit-opt\n"
-            "  python scripts/hpc_sync.py status\n"
-            "  python scripts/hpc_sync.py --mol 002 submit-nbo\n"
-            "  python scripts/hpc_sync.py --mol 002 download\n"
-            "\nexamples (single-point, dft_inputs/):\n"
-            "  python scripts/hpc_sync.py --dir data/output/dft_inputs upload\n"
-            "  python scripts/hpc_sync.py --dir data/output/dft_inputs submit-sp\n"
-            "  python scripts/hpc_sync.py --dir data/output/dft_inputs download\n"
+            "examples (two-stage opt→nbo, dft_opt/):\n"
+            "  python scripts/dft/hpc_sync.py --mol 002 --dry-run upload\n"
+            "  python scripts/dft/hpc_sync.py --mol 002 upload\n"
+            "  python scripts/dft/hpc_sync.py --mol 002 submit-opt\n"
+            "  python scripts/dft/hpc_sync.py status\n"
+            "  python scripts/dft/hpc_sync.py --mol 002 submit-nbo\n"
+            "  python scripts/dft/hpc_sync.py --mol 002 download\n"
+            "\nexamples (single-point, dft_sp/):\n"
+            "  python scripts/dft/hpc_sync.py --dir data/output/dft_sp upload\n"
+            "  python scripts/dft/hpc_sync.py --dir data/output/dft_sp submit-sp\n"
+            "  python scripts/dft/hpc_sync.py --dir data/output/dft_sp download\n"
             "\nnote: all flags (--mol, --dir, --dry-run) must come BEFORE the subcommand\n"
         ),
     )
@@ -255,8 +254,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--dir", metavar="PATH", default=None,
-        help="Local job directory to sync (default: data/output/dft_opt_test). "
-             "Use data/output/dft_inputs for single-point jobs.",
+        help="Local job directory to sync (default: data/output/dft_opt). "
+             "Use data/output/dft_sp for single-point jobs.",
     )
 
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
@@ -264,7 +263,7 @@ def main() -> None:
     sub.add_parser("upload",      help="Upload molecule directories to cluster")
     sub.add_parser("submit-opt",  help="Submit Stage 1 geometry-opt jobs ({name}_opt.gjf)")
     sub.add_parser("submit-nbo",  help="Submit Stage 2 NBO jobs ({name}_nbo.gjf) — AFTER Stage 1 finishes")
-    sub.add_parser("submit-sp",   help="Submit single-point NBO jobs ({name}.gjf, for dft_inputs/)")
+    sub.add_parser("submit-sp",   help="Submit single-point NBO jobs ({name}.gjf, for dft_sp/)")
     sub.add_parser("download",    help="Download *.log files from cluster")
     sub.add_parser("status",      help="Show running g16 processes on server")
 

@@ -10,10 +10,12 @@ beckmann-pipeline/
 │   ├── 00_benchmark_to_oximes.py   ketone SMILES → protonated activated oximes (E/Z)
 │   ├── 01_smiles_to_conformers.py  Auto3D conformer generation + AIMNet2 ranking
 │   ├── 02_select_and_optimize.py   AIMNet2/ASE geometry optimisation
-│   ├── 03_prepare_dft_inputs.py    single-point NBO inputs (all 34 molecules)
 │   ├── 04_extract_dihedrals_and_predict.py  dihedral analysis + benchmark
-│   ├── 05_prepare_test_opt.py      two-stage opt→NBO inputs (test set)
-│   └── hpc_sync.py                 upload/submit/download for Citadel
+│   └── dft/
+│       ├── prepare_sp.py           single-point NBO inputs (all 34 molecules)
+│       ├── prepare_opt.py          two-stage opt→NBO inputs (test set)
+│       ├── hpc_sync.py             upload/submit/download for Citadel
+│       └── parse_nbo.py            NBO output parser (in development)
 ├── data/
 │   ├── input/
 │   │   ├── benchmark.csv           34 ketones with experimental R/F outcomes
@@ -21,8 +23,8 @@ beckmann-pipeline/
 │   └── output/
 │       ├── conformers/             Auto3D output (SDF, one dir per run)
 │       ├── aimnet_optimized/       best_aimnet_optimized.sdf
-│       ├── dft_inputs/             single-point Gaussian inputs (script 03)
-│       └── dft_opt_test/           two-stage opt+NBO inputs (script 05, test set)
+│       ├── dft_sp/                 single-point Gaussian inputs + logs
+│       └── dft_opt/                two-stage opt+NBO inputs + logs
 ├── app.py                          Flask web UI
 ├── tests/test_draft.py
 ├── .env.example                    HPC config template (copy to .env, gitignored)
@@ -45,57 +47,60 @@ Python 3.11. `KMP_DUPLICATE_LIB_OK=TRUE` is set automatically by all scripts (re
 python scripts/00_benchmark_to_oximes.py   # ketones → oximes
 python scripts/01_smiles_to_conformers.py  # conformer generation
 python scripts/02_select_and_optimize.py   # AIMNet2 geometry opt
-python scripts/03_prepare_dft_inputs.py    # Gaussian sp+NBO inputs (all 34)
-python scripts/04_extract_dihedrals_and_predict.py  # benchmark
+python scripts/04_extract_dihedrals_and_predict.py  # dihedral benchmark
 ```
 
-For the DFT test set (molecules 002, 006, 020, 021 — two-stage opt then NBO):
+DFT phase — prepare inputs, then use `hpc_sync.py` to submit to Citadel:
 
 ```bash
-python scripts/05_prepare_test_opt.py
+# Option A: single-point NBO on AIMNet2 geometry (all 34 molecules)
+python scripts/dft/prepare_sp.py
+
+# Option B: DFT geometry opt then NBO (test set: 002, 006, 020, 021)
+python scripts/dft/prepare_opt.py
 ```
 
 ## DFT output files
 
-Each molecule directory in `data/output/dft_opt_test/{name}/` contains:
+### `data/output/dft_opt/{name}/` — two-stage opt + NBO
 
 | File | In git | What it is |
 |---|---|---|
 | `{name}_opt.gjf` | yes | Gaussian input — Stage 1 geometry optimisation (`wB97XD/6-311+G(d,p) opt`). Starting geometry from AIMNet2. |
-| `{name}_opt.log` | no | Gaussian output — Stage 1. Contains SCF iterations, geometry steps, converged geometry. Must end with "Normal termination". |
-| `{name}_nbo.gjf` | yes | Gaussian input — Stage 2 NBO single-point (`sp pop=nboread geom=checkpoint`). Reads geometry from `_opt.chk`. Run after Stage 1 completes. |
-| `{name}_nbo.log` | no | Gaussian output — Stage 2. Contains the NBO analysis: natural bond orbitals, E2PERT donor→acceptor perturbation table, Wiberg bond indices (BNDIDX), NBO summary. Primary output for CN-handoff analysis. |
+| `{name}_opt.log` | no | Gaussian output — Stage 1. SCF iterations, geometry steps, converged geometry. Must end with "Normal termination". |
+| `{name}_nbo.gjf` | yes | Gaussian input — Stage 2 NBO single-point (`sp pop=nboread geom=checkpoint`). Reads geometry from `_opt.chk`. Run after Stage 1. |
+| `{name}_nbo.log` | no | Gaussian output — Stage 2. NBO analysis: E2PERT donor→acceptor table, Wiberg bond indices, NBO summary. Primary output for CN-handoff analysis. |
 
 Files that stay on the cluster only:
 
 | File | What it is |
 |---|---|
 | `{name}_opt.chk` | Binary checkpoint from Stage 1 — stores converged wavefunction and DFT geometry. Required by Stage 2. |
-| `Gau-XXXXXX.rwf / .inp` | Gaussian scratch files — deleted automatically on normal termination. If they persist, the job crashed. |
+| `Gau-XXXXXX.rwf / .inp` | Gaussian scratch files — deleted on normal termination. If they persist, the job crashed. |
 
-For `data/output/dft_inputs/{name}/` (single-point jobs, script 03):
+### `data/output/dft_sp/{name}/` — single-point NBO on AIMNet2 geometry
 
 | File | In git | What it is |
 |---|---|---|
-| `{name}.gjf` | yes | Gaussian input — single-point NBO on AIMNet2 geometry (`sp pop=nboread`). No DFT re-optimisation. |
-| `{name}.log` | no | Gaussian output with NBO analysis at AIMNet2 geometry. |
+| `{name}.gjf` | yes | Gaussian input — single-point NBO directly on AIMNet2 geometry. No DFT re-optimisation. |
+| `{name}.log` | no | Gaussian output with NBO analysis. |
 
-**Reading NBO output:** atom indices in the NBO log match the `[oxime: C{ci}=N{ni}-O{oi}]` label written in each `.gjf` title line. Search the `_nbo.log` for `E2PERT` to find donor→acceptor interactions; the `BD* N–O` entries show which σ bonds donate into the N–O antibond (key for CN-handoff analysis).
+**Reading NBO output:** atom indices in the NBO log match the `[oxime: C{ci}=N{ni}-O{oi}]` label in each `.gjf` title line. Search the `_nbo.log` for `E2PERT` to find donor→acceptor interactions; `BD* N–O` entries show which σ bonds donate into the N–O antibond (the key descriptor for CN-handoff analysis).
 
 ## HPC submission (Citadel)
 
-Citadel (`citadel.chem.cmu.edu`) is a shared compute server — no SLURM. Jobs run directly via `g16` (`/opt/g16/g16`). Use `hpc_sync.py`:
+Citadel (`citadel.chem.cmu.edu`) is a shared compute server — no SLURM. Jobs run directly via `g16`. Use `scripts/dft/hpc_sync.py`:
 
 ```bash
 # Copy config template and fill in your details
 cp .env.example .env
 
-# Test set workflow (mol 002 as example)
-python scripts/hpc_sync.py --mol 002 upload
-python scripts/hpc_sync.py --mol 002 submit-opt
-python scripts/hpc_sync.py status              # check when done
-python scripts/hpc_sync.py --mol 002 submit-nbo
-python scripts/hpc_sync.py --mol 002 download
+# Two-stage workflow (mol 002 as example)
+python scripts/dft/hpc_sync.py --mol 002 upload
+python scripts/dft/hpc_sync.py --mol 002 submit-opt
+python scripts/dft/hpc_sync.py status              # check when done
+python scripts/dft/hpc_sync.py --mol 002 submit-nbo
+python scripts/dft/hpc_sync.py --mol 002 download
 ```
 
 SSH key auth must be set up (`ssh-copy-id igallini@citadel.chem.cmu.edu`) so commands run without password prompts.
