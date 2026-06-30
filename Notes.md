@@ -49,9 +49,6 @@ test_step3_oxime_atom_map_matches_sdf closes the loop: it reads each .gjf back, 
 Set of 5 and 6 membered substrates with methyl or methoxy substituents in position 4 
 - mols: 2, 6, 20, 21
 
-## Implement Orbital Resolved Electron Routing Framework
-
----
 
 ## NBO Output: mol_002_E (first completed DFT run)
 
@@ -135,3 +132,30 @@ Each molecule in the benchmark has a different atom map because RDKit writes ato
 
 The test `test_sp_oxime_label_matches_sdf` already verifies the label is correct for all 34 molecules. When parse_nbo.py is added, a corresponding test should verify that the parser extracts a non-null E2 value for at least the two C–C → N–O σ\* entries in every completed log.
 
+## Implement Orbital Resolved Electron Routing Framework
+Goal: Implement orbital resolved electron routing framework: move beyond single point ground state analysis and perform relaxed potential energy surface (PES) scans to capture electronic reorganization preceding bond cleavage. Selective rearrangement is determined by a specific avoided crossing event in the virtual manifold as N-O bond elongates. 
+
+N-OH2 bond stretch: Gaussian will perform an optimization at the initial distance, then increment by 0.1 Å and re-optimize the rest of the molecule for each of the 5 snapshots
+- relaxed scan, where the N–O bond is fixed at specific lengths while all other internal coordinates are optimized
+- Gaussian **Opt=ModRedundant** keyword
+- **The Geometry Section:** After the molecular coordinates, specify the bond to be stretched. 
+- Important consideration: when the N-O bond is stretched the since oxygen is protonated, N-OH2 hydrogens should move along with oxygen not be strained away by mistake
+
+Steps:
+1. **Relaxed Potential Energy Surface (PES) Scan:** Perform a scan of the N–O bond 
+2. **NBO Analysis on Snapshots:** Run NBO7 on the optimized geometry of each scan point using the following command string in your Gaussian input: `$NBO E2PERT BNDIDX NBOSUM CMO $END`.
+3. **Data Extraction (Parsing):**
+    - **From** **E2PERT** **/** **NBOSUM****:** Extract E(2) values for donor → acceptor interactions involving the activation coordinate (σNO∗​), the rearrangement channel (σC1−C7∗​), and the nitrilium channel (σC7−N17∗​).
+    - **From** **CMO****:** Extract the leading NBO contributions (antibonding weights w) for all virtual orbitals within an energy window of **0.4 a.u. above the LUMO**.
+4. **Metric Calculation:** Use your code to compute Ψ, logΛ, and wCNmax​ for each scan point.
+5. **Differential Response:** Calculate the **least-squares slopes (**d/dR**)** of these metrics with respect to the N–O distance (R) to measure the rate of electronic reorganization
+
+Analysis: Parse the NBO output at each scan point (N-O bond lengths R, R+0.1 A, R+0.2 A, R+0.3 A, R+0.4 A) to calculate these descriptors:
+	- Hyperconjugative Competition (Ψ)
+	- Frontier Dominance Metric (Λ)
+	- CN-weighted Acceptor Response (wCNmax​)
+	- Differential Response (d/dR)
+Descriptors: key descriptors used in the Beckmann rearrangement study are custom metrics derived from raw NBO7 output. 
+- **Hyperconjugative Competition (**Ψ**):** Calculated by taking the ratio of specific E(2) stabilization energies (e.g., the migrating bond feeding the activation coordinate).
+- **Frontier Dominance (**Λ**):** A dimensionless measure calculated from the maximum antibonding weights (w) found in the virtual manifold.
+- **CN-weighted Acceptor Response (**wCNmax​**):** Derived by parsing the Canonical Molecular Orbital (CMO) analysis to find the highest weight of specific antibonds (like σC1−C7∗​) within a specific energy window above the LUMO.

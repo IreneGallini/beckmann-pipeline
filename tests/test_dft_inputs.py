@@ -143,3 +143,28 @@ def test_nbo_gjf_charge(dft_opt_dir):
         charge, mult = _charge_mult(gjf.read_text())
         assert charge == 1, f"{gjf.name}: charge={charge}, expected 1"
         assert mult == 1,   f"{gjf.name}: multiplicity={mult}, expected 1"
+
+
+def test_scan_gjf_exists(dft_opt_dir):
+    """Each test-set mol directory must have a _scan.gjf for the N-O bond scan."""
+    for mol_id in TEST_SET:
+        dirs = list(dft_opt_dir.glob(f"mol_{mol_id}_*/"))
+        assert len(dirs) == 1, f"mol_{mol_id}: expected 1 directory, found {len(dirs)}"
+        mol_dir = dirs[0]
+        name = mol_dir.name
+        assert (mol_dir / f"{name}_scan.gjf").exists(), f"Missing: {name}_scan.gjf"
+
+
+def test_scan_gjf_has_ModRedundant_and_CMO(dft_opt_dir):
+    """Scan file must request ModRedundant opt, have CMO in the NBO block, and a B scan line."""
+    for gjf in dft_opt_dir.glob("**/*_scan.gjf"):
+        text = gjf.read_text()
+        assert "ModRedundant" in text,  f"{gjf.name}: missing 'ModRedundant' in route"
+        assert "pop=nboread" in text,   f"{gjf.name}: missing 'pop=nboread'"
+        assert "geom=checkpoint" in text, f"{gjf.name}: missing 'geom=checkpoint'"
+        assert "%oldchk=" in text,      f"{gjf.name}: missing '%oldchk' line"
+        assert "CMO" in text,           f"{gjf.name}: missing 'CMO' in NBO block"
+        assert "E2PERT" in text,        f"{gjf.name}: missing 'E2PERT' in NBO block"
+        lines = text.splitlines()
+        scan_lines = [l for l in lines if l.startswith("B ") and " S " in l]
+        assert scan_lines, f"{gjf.name}: missing 'B N O S 4 0.1' ModRedundant scan line"

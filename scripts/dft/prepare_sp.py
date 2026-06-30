@@ -28,6 +28,9 @@ NPROC        = 8
 MEM_GB       = 16
 CHARGE       = 1   # protonated activated oxime (C=N-[OH2+])
 MULTIPLICITY = 1
+# CMO keyword requires NBO7 (separately licensed). Citadel runs NBO 3.1 (bundled
+# with Gaussian 16), which does not support CMO. Add CMO here only if NBO7 is
+# installed and linked on the cluster.
 NBO_KEYWORDS = "E2PERT BNDIDX NBOSUM"
 # ──────────────────────────────────────────────────────────────────────────────
 

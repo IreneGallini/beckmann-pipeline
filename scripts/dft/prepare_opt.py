@@ -39,6 +39,9 @@ NPROC        = 8
 MEM_GB       = 16
 CHARGE       = 1
 MULTIPLICITY = 1
+# CMO keyword requires NBO7 (separately licensed). Citadel runs NBO 3.1 (bundled
+# with Gaussian 16), which does not support CMO. Add CMO here only if NBO7 is
+# installed and linked on the cluster.
 NBO_KEYWORDS = "E2PERT BNDIDX NBOSUM"
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -82,6 +85,30 @@ def _nbo_gjf(name: str, oxime_label: str) -> str:
     )
 
 
+def _scan_gjf(name: str, ni: int, oi: int, oxime_label: str) -> str:
+    """Stage 3: relaxed N-O bond scan — 5 points (R to R+0.4 A), NBO at each.
+
+    Section order matters: ModRedundant specs come immediately after charge/mult,
+    then the NBO block as a second additional input section.
+    """
+    return (
+        f"%chk={name}_scan.chk\n"
+        f"%oldchk={name}_opt.chk\n"
+        f"%nprocshared={NPROC}\n"
+        f"%mem={MEM_GB}GB\n"
+        f"#p {FUNCTIONAL}/{BASIS} opt=(ModRedundant,MaxCycles=200) pop=nboread geom=checkpoint guess=read\n"
+        f"\n"
+        f"{name} scan  {oxime_label}\n"
+        f"\n"
+        f"{CHARGE} {MULTIPLICITY}\n"
+        f"\n"
+        f"B {ni} {oi} S 4 0.1\n"
+        f"\n"
+        f"$NBO {NBO_KEYWORDS} $END\n"
+        f"\n\n"
+    )
+
+
 def main() -> None:
     root   = Path(__file__).parent.parent.parent
     sdf    = root / "data" / "output" / "aimnet_optimized" / "best_per_substrate.sdf"
@@ -92,8 +119,8 @@ def main() -> None:
     mols  = [m for m in suppl if m is not None]
     test_mols = [m for m in mols if m.GetProp("_Name").split("_")[1] in TEST_IDS]
 
-    print(f"\n{'Name':<24} {'Atoms':>5}  {'Oxime':>20}  Stage1  Stage2")
-    print("-" * 72)
+    print(f"\n{'Name':<24} {'Atoms':>5}  {'Oxime':>20}  Stage1  Stage2  Stage3")
+    print("-" * 80)
 
     for mol in test_mols:
         name = mol.GetProp("_Name")
@@ -113,7 +140,13 @@ def main() -> None:
         mol_dir.mkdir(exist_ok=True)
         (mol_dir / f"{name}_opt.gjf").write_text(_opt_gjf(name, coords, oxime_label))
         (mol_dir / f"{name}_nbo.gjf").write_text(_nbo_gjf(name, oxime_label))
-        print(f"  {name:<24} {len(coords):>5}  {oxime_label:>20}   ✓      ✓")
+        if match:
+            (mol_dir / f"{name}_scan.gjf").write_text(_scan_gjf(name, ni, oi, oxime_label))
+            scan_mark = "✓"
+        else:
+            print(f"  WARNING: {name} — oxime pattern not found, _scan.gjf not written")
+            scan_mark = "✗"
+        print(f"  {name:<24} {len(coords):>5}  {oxime_label:>20}   ✓      ✓      {scan_mark}")
 
     print(f"\n{len(test_mols)} structures written to {outdir}")
     print("\nSubmit on Citadel via hpc_sync.py:")

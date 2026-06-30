@@ -6,9 +6,10 @@ Citadel (citadel.chem.cmu.edu) is a shared Ubuntu compute server — no SLURM.
 Gaussian 16 is at /opt/g16/g16. Jobs run via nohup and survive disconnection.
 
 Two job types are supported:
-  Two-stage (dft_opt/):  submit-opt → submit-nbo
-    Used for DFT geometry optimisation followed by NBO single-point.
-    Input files: {name}_opt.gjf and {name}_nbo.gjf
+  Two-stage (dft_opt/):  submit-opt → submit-scan (and/or submit-nbo)
+    submit-scan: relaxed N-O bond scan, 5 points, NBO at each (primary).
+    submit-nbo:  NBO single-point at equilibrium geometry (optional baseline).
+    Input files: {name}_opt.gjf, {name}_scan.gjf, {name}_nbo.gjf
   Single-point (dft_sp/): submit-sp
     Used for NBO single-point directly on AIMNet2 geometry.
     Input files: {name}.gjf
@@ -17,7 +18,8 @@ Typical two-stage workflow:
   python scripts/dft/hpc_sync.py --mol 002 upload
   python scripts/dft/hpc_sync.py --mol 002 submit-opt
   python scripts/dft/hpc_sync.py status
-  python scripts/dft/hpc_sync.py --mol 002 submit-nbo   # after Stage 1 finishes
+  python scripts/dft/hpc_sync.py --mol 002 submit-scan  # Stage 3 — after Stage 1 finishes
+  python scripts/dft/hpc_sync.py --mol 002 submit-nbo   # Stage 2 (optional equilibrium NBO)
   python scripts/dft/hpc_sync.py --mol 002 download
 
 For dft_sp/ (single-point jobs):
@@ -172,6 +174,33 @@ def cmd_submit_nbo(config: dict, dry_run: bool, mol: str | None, local_dir: Path
     print("\nStage 2 launched. Monitor with:\n  python scripts/dft/hpc_sync.py status")
 
 
+def cmd_submit_scan(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
+    """SSH into the server and run Stage 3 (N-O scan) jobs via nohup g16."""
+    host       = config["HPC_HOST"]
+    remote_dir = config["HPC_REMOTE_DIR"]
+    print(
+        "\nWARNING: Scan jobs read _opt.chk from Stage 1.\n"
+        "         Only proceed once ALL opt jobs show Normal termination.\n"
+        "         Check first: python scripts/dft/hpc_sync.py status"
+    )
+    pattern      = f"mol_{mol.zfill(3)}_*" if mol else "*"
+    g16          = config["G16_PATH"]
+    gauss_exedir = str(Path(g16).parent)
+    g16root      = str(Path(g16).parent.parent)
+    submit_cmd = (
+        f'export GAUSS_EXEDIR={gauss_exedir} && '
+        f'export g16root={g16root} && '
+        f'cd {remote_dir} && '
+        f'for dir in {pattern}/; do '
+        '  name="${dir%/}"; '
+        f'  (cd "$dir" && nohup {g16} < "${{name}}_scan.gjf" > "${{name}}_scan.log" 2>&1 &); '
+        'done'
+    )
+    print(f"\n-- Launching Stage 3 (scan) jobs on {host}:{remote_dir}")
+    run(["ssh", host, submit_cmd], dry_run)
+    print("\nStage 3 launched. Monitor with:\n  python scripts/dft/hpc_sync.py status")
+
+
 def cmd_submit_sp(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
     """SSH into the server and run single-point NBO jobs (dft_sp/ style)."""
     host       = config["HPC_HOST"]
@@ -262,7 +291,8 @@ def main() -> None:
     sub.required = True
     sub.add_parser("upload",      help="Upload molecule directories to cluster")
     sub.add_parser("submit-opt",  help="Submit Stage 1 geometry-opt jobs ({name}_opt.gjf)")
-    sub.add_parser("submit-nbo",  help="Submit Stage 2 NBO jobs ({name}_nbo.gjf) — AFTER Stage 1 finishes")
+    sub.add_parser("submit-nbo",  help="Submit Stage 2 NBO single-point jobs ({name}_nbo.gjf) — AFTER Stage 1 finishes")
+    sub.add_parser("submit-scan", help="Submit Stage 3 N-O scan jobs ({name}_scan.gjf) — AFTER Stage 1 finishes")
     sub.add_parser("submit-sp",   help="Submit single-point NBO jobs ({name}.gjf, for dft_sp/)")
     sub.add_parser("download",    help="Download *.log files from cluster")
     sub.add_parser("status",      help="Show running g16 processes on server")
@@ -278,9 +308,10 @@ def main() -> None:
 
     dispatch = {
         "upload":     cmd_upload,
-        "submit-opt": cmd_submit_opt,
-        "submit-nbo": cmd_submit_nbo,
-        "submit-sp":  cmd_submit_sp,
+        "submit-opt":  cmd_submit_opt,
+        "submit-nbo":  cmd_submit_nbo,
+        "submit-scan": cmd_submit_scan,
+        "submit-sp":   cmd_submit_sp,
         "download":   cmd_download,
         "status":     cmd_status,
     }
