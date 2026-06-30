@@ -158,35 +158,50 @@ Atom map: C11=N12–O13 | aryl=C6, alkyl=C10
 
 **Ψ(R0) = 12.63 / 3.38 = 3.74** (aryl dominates → classical prediction: R)
 
-### E2PERT at R0+0.4 Å (final scan point)
+### Full 5-point E2PERT scan
 
-At R0+0.4 Å, **BD\*(1) N12–O13 has vanished from the acceptor table** — it is no longer a distinct NBO. The donation pattern has completely reorganised:
+The scan job only ran NBO at R0 and R0+0.4. The 3 intermediate geometries were extracted from the scan log using `scripts/dft/extract_scan_sp.py` and submitted as separate single-point jobs (`_sp2.gjf`, `_sp3.gjf`, `_sp4.gjf`).
 
-| Donor | Type | Acceptor | E2 (kcal/mol) |
+| R(N–O) Å | Source | Aryl → acceptor | Alkyl → acceptor | Dominant acceptor |
+|---|---|---|---|---|
+| 1.6119 (R0) | scan initial + _nbo | **BD\*(1) N12–O13: 12.63** | BD\*(1) N12–O13: 3.38 | σ\*(N–O) |
+| 1.7119 (R0+0.1) | sp2 | **BD\*(1) N12–O13: 15.70** | BD\*(1) N12–O13: 4.54 | σ\*(N–O) |
+| 1.8119 (R0+0.2) | sp3 | **LP\*(2) N12: 21.80** | LP\*(2) N12: 7.23 | LP\*(N) + σ\*(C–N) |
+| 1.9119 (R0+0.3) | sp4 | **LP\*(2) N12: 24.10** | LP\*(2) N12: 9.08 | LP\*(N) + σ\*(C–N) |
+| 2.0119 (R0+0.4) | scan final | **LP\*(2) N12: 25.83** | LP\*(2) N12: 11.21 | LP\*(N) + σ\*(C–N) |
+
+Ψ values (E2\_aryl / E2\_alkyl into the dominant N-O channel):
+
+| R(N–O) Å | E2\_aryl (kcal/mol) | E2\_alkyl (kcal/mol) | Ψ |
 |---|---|---|---|
-| BD(2) C6–C7 | aryl C–C π | BD\*(2) C11–N12 π\* | **46.01** |
-| BD(1) C6–C11 | aryl C–C σ | LP\*(2) N12 | **25.83** |
-| BD(1) C10–C11 | alkyl C–C σ | LP\*(2) N12 | **11.21** |
-| BD(1) C9–C10 | alkyl C–C σ | BD\*(1) C11–N12 σ\* | 5.16 |
-| BD(1) C6–C11 | aryl C–C σ | BD\*(1) C11–N12 σ\* | 2.68 |
-| BD(1) C10–C11 | alkyl C–C σ | BD\*(1) C11–N12 σ\* | 1.50 |
+| 1.6119 | 12.63 | 3.38 | **3.74** |
+| 1.7119 | 15.70 | 4.54 | **3.46** |
+| 1.8119 | 21.80 (into LP\*N) | 7.23 | **3.02** |
+| 1.9119 | 24.10 | 9.08 | **2.66** |
+| 2.0119 | 25.83 | 11.21 | **2.30** |
 
-### CN-handoff: the key observation
+d/dR ≈ (2.30 − 3.74) / 0.4 = **−3.6 Å⁻¹** (Ψ decreasing as N–O stretches)
 
-Between R0 and R0+0.4 Å the virtual orbital landscape undergoes a qualitative change:
+### CN-handoff: when and what changes
 
-- **At R0**: the dominant σ-acceptor is σ\*(N–O). Both C–C bonds donate into it; aryl wins 3.7×.
-- **At R0+0.4**: σ\*(N–O) is gone. The N12 lone-pair antibonding LP\*(2) and σ\*(C11–N12) have taken its place. Aryl still dominates into these new acceptors (25.83 vs 11.21 into LP\*N12), but the acceptor has fundamentally changed character — it now has CN-like antibonding character rather than NO-like.
+The σ\*(N–O) acceptor **disappears between R0+0.1 and R0+0.2 Å** (between 1.7119 and 1.8119 Å). Before this crossing:
+- Both C–C bonds donate into BD\*(1) N12–O13 (σ\* of the breaking N–O bond)
+- Aryl leads Ψ ~ 3.5–3.7×
 
-This is the CN-handoff event. The σ\*NO orbital acquires C11–N12 σ\* character as the N–O bond stretches, crossing over somewhere between R0 and R0+0.4 Å.
+After the crossing (R ≥ 1.8119 Å):
+- σ\*(N–O) is no longer a distinct NBO
+- The dominant acceptors are LP\*(2) N12 (N lone-pair antibonding) and BD\*(1/2) C11–N12
+- Aryl still leads (Ψ ~ 2.3–3.0) but into a CN-like channel
+- The aryl π system (BD(2) C6–C7 → BD\*(2) C11–N12) grows from 46 → 50 kcal/mol across the range
 
-**For mol_002_E (experiment = F):** even though aryl leads at equilibrium (Ψ=3.74), the virtual manifold reorganises toward C11–N12 character by R0+0.4. The aryl π system (46.01 kcal/mol into C11–N12 π\*) strongly stabilises the developing CN σ\* channel — possibly quenching the aryl migration pathway and allowing the alkyl fragmentation (C10–C11 cleavage) to win energetically.
+**For mol_002_E (experiment = F):** the equilibrium Ψ predicts aryl migration (R), but the CN-handoff occurs very early (between R0+0.1 and R0+0.2). As the N–O bond stretches, aryl is preferentially stabilising the developing C11–N12 σ\* channel (LP\*N and σ\*CN become the sinks), which may prevent the aryl group from accumulating the bond order needed to complete migration. The alkyl C10–C11 fragmentation pathway wins.
+
+The decreasing Ψ slope (d/dR = −3.6 Å⁻¹) means aryl's relative advantage over alkyl SHRINKS as the reaction proceeds, consistent with the fragmentation outcome.
 
 ### What's still needed
 
-1. **Intermediate scan points (R0+0.1, +0.2, +0.3):** Set up 3 separate single-point NBO jobs at these geometries (extract from scan checkpoint) to get Ψ at all 5 points and compute d/dR properly.
-2. **CMO analysis (Λ, wCNmax):** Requires gennbo7 on a `.47` archive. The Stage 2 `_nbo.gjf` includes `ARCHIVE FILE=mol_002_E` to produce this file — submit Stage 2 and then run `gennbo.i8.exe mol_002_E.47` with CMO.
-3. **Remaining test set molecules (006, 020, 021):** Run the full pipeline so we have scan data for all 4 test molecules to compare CN-handoff across R vs F outcomes.
+1. **CMO analysis (Λ, wCNmax):** Requires gennbo7 on a `.47` archive. The Stage 2 `_nbo.gjf` includes `ARCHIVE FILE=mol_002_E` — submit Stage 2 then run `gennbo.i8.exe mol_002_E.47` with CMO.
+2. **Remaining test set molecules (006, 020, 021):** Run the full pipeline so we have scan data for all 4 test molecules to compare CN-handoff across R vs F outcomes.
 
 ---
 
