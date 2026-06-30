@@ -39,12 +39,11 @@ NPROC        = 8
 MEM_GB       = 16
 CHARGE       = 1
 MULTIPLICITY = 1
-# CMO requires NBO7 linked into the Gaussian build (NBOEXE mechanism).
-# Citadel's g16 does not support NBOEXE — l607.exe (NBO 3.1) runs regardless.
-# Remove CMO until the admin links NBO7 into g16 (or provides a patched l607.exe).
-# With the current setup, E2PERT+BNDIDX+NBOSUM enable Psi and d/dR descriptors.
-# Lambda and wCNmax (CMO-based) are deferred.
-NBO_KEYWORDS = "E2PERT BNDIDX NBOSUM"
+NBO_KEYWORDS_EQ   = "E2PERT BNDIDX NBOSUM"   # equilibrium NBO (NBO 3.1 bundled in g16)
+NBO_KEYWORDS_SCAN = "E2PERT BNDIDX NBOSUM"   # scan (NBO 3.1 bundled in g16)
+# CMO is only available in NBO7 (gennbo.i8.exe), not in the g16-bundled NBO 3.1.
+# Stage 2 writes a .47 density archive (ARCHIVE FILE=); after g16 finishes,
+# run gennbo.i8.exe on the .47 file with CMO to get Lambda and wCNmax.
 # ──────────────────────────────────────────────────────────────────────────────
 
 OXIME_PAT = Chem.MolFromSmarts('[C:1]=[N:2]-[O+:3]')
@@ -70,7 +69,12 @@ def _opt_gjf(name: str, coords: list[tuple], oxime_label: str) -> str:
 
 
 def _nbo_gjf(name: str, oxime_label: str) -> str:
-    """Stage 2: NBO single-point — reads DFT geometry from opt checkpoint."""
+    """Stage 2: NBO single-point — reads DFT geometry from opt checkpoint.
+
+    ARCHIVE FILE={name} writes a .47 density archive for downstream gennbo7
+    analysis (CMO-based descriptors Lambda and wCNmax).  NBO 3.1 (bundled)
+    handles E2PERT/BNDIDX/NBOSUM here; CMO is read from the .47 by gennbo.
+    """
     return (
         f"%chk={name}_nbo.chk\n"
         f"%oldchk={name}_opt.chk\n"
@@ -82,7 +86,7 @@ def _nbo_gjf(name: str, oxime_label: str) -> str:
         f"\n"
         f"{CHARGE} {MULTIPLICITY}\n"
         f"\n"
-        f"$NBO {NBO_KEYWORDS} $END\n"
+        f"$NBO {NBO_KEYWORDS_EQ} ARCHIVE FILE={name} $END\n"
         f"\n\n"
     )
 
@@ -106,7 +110,7 @@ def _scan_gjf(name: str, ni: int, oi: int, oxime_label: str) -> str:
         f"\n"
         f"B {ni} {oi} S 4 0.1\n"
         f"\n"
-        f"$NBO {NBO_KEYWORDS} $END\n"
+        f"$NBO {NBO_KEYWORDS_SCAN} $END\n"
         f"\n\n"
     )
 

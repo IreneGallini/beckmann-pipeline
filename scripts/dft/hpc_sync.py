@@ -80,13 +80,21 @@ def require_config(config: dict) -> None:
 
 
 def _gauss_exports(config: dict) -> str:
-    """Build the export prefix for non-interactive SSH shells."""
+    """Build the export prefix for non-interactive SSH shells.
+
+    Gaussian finds gaunbo7 by searching PATH (not via NBOEXE).  Adding the
+    NBO7 bin directory to PATH is what enables CMO output on this installation.
+    """
     g16          = config["G16_PATH"]
     gauss_exedir = str(Path(g16).parent)
     g16root      = str(Path(g16).parent.parent)
     exports = f'export GAUSS_EXEDIR={gauss_exedir} && export g16root={g16root}'
     if config.get("NBOEXE"):
-        exports += f' && export NBOEXE={config["NBOEXE"]}'
+        nbo_bin = str(Path(config["NBOEXE"]).parent)
+        # Prepend NBO7 bin to GAUSS_EXEDIR so l607.exe finds 'gaunbo7' there.
+        # PATH alone is not searched by g16; GAUSS_EXEDIR is.
+        exports += f' && export GAUSS_EXEDIR={nbo_bin}:{gauss_exedir}'
+        exports += f' && export PATH={nbo_bin}:$PATH'
     return exports
 
 

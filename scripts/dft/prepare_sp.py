@@ -28,10 +28,7 @@ NPROC        = 8
 MEM_GB       = 16
 CHARGE       = 1   # protonated activated oxime (C=N-[OH2+])
 MULTIPLICITY = 1
-# CMO requires NBO7 linked into the Gaussian build (NBOEXE mechanism).
-# Citadel's g16 does not support NBOEXE — l607.exe (NBO 3.1) runs regardless.
-# Remove CMO until the admin links NBO7 into g16 (or provides a patched l607.exe).
-NBO_KEYWORDS = "E2PERT BNDIDX NBOSUM"
+NBO_KEYWORDS = "E2PERT BNDIDX NBOSUM CMO"
 # ──────────────────────────────────────────────────────────────────────────────
 
 OXIME_PAT = Chem.MolFromSmarts('[C:1]=[N:2]-[O+:3]')

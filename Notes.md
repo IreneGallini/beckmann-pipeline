@@ -132,6 +132,64 @@ Each molecule in the benchmark has a different atom map because RDKit writes ato
 
 The test `test_sp_oxime_label_matches_sdf` already verifies the label is correct for all 34 molecules. When parse_nbo.py is added, a corresponding test should verify that the parser extracts a non-null E2 value for at least the two C–C → N–O σ\* entries in every completed log.
 
+## N–O Bond Scan: mol_002_E (Stage 3 — relaxed PES scan)
+
+**Job:** `mol_002_E_scan.gjf` — `wB97XD/6-311+G(d,p) opt=(ModRedundant,MaxCycles=200) pop=nboread geom=checkpoint`
+**Scan:** N12–O13 bond stretched from R0 in 4 steps of 0.1 Å (5 points: R0 to R0+0.4 Å)
+**NBO keywords:** `E2PERT BNDIDX NBOSUM`
+**Status:** Normal termination (20 min wall time, 2h 47min CPU)
+
+### How many NBO analyses ran
+
+Gaussian ran NBO **twice**, not five times:
+1. **At R0**: on the geometry read from `_opt.chk` before the scan optimisation starts (the equilibrium DFT geometry)
+2. **At R0+0.4 Å**: on the final converged scan geometry (scan point 5)
+
+Intermediate points (R0+0.1, +0.2, +0.3) did not produce separate NBO output. This is a Gaussian behaviour with `opt=(ModRedundant)` + `pop=nboread`: population analysis runs at the initial and final geometries only, not at each intermediate scan point. To get all 5 NBO analyses, we need 5 separate single-point NBO jobs at fixed N–O distances (or 3 additional jobs for the missing intermediate points).
+
+### E2PERT at R0 (equilibrium, from Stage 2 _nbo.log — confirmed in scan)
+
+Atom map: C11=N12–O13 | aryl=C6, alkyl=C10
+
+| Donor | Type | Acceptor | E2 (kcal/mol) |
+|---|---|---|---|
+| BD(1) C6–C11 | aryl C–C σ | BD\*(1) N12–O13 | **12.63** |
+| BD(1) C10–C11 | alkyl C–C σ | BD\*(1) N12–O13 | **3.38** |
+
+**Ψ(R0) = 12.63 / 3.38 = 3.74** (aryl dominates → classical prediction: R)
+
+### E2PERT at R0+0.4 Å (final scan point)
+
+At R0+0.4 Å, **BD\*(1) N12–O13 has vanished from the acceptor table** — it is no longer a distinct NBO. The donation pattern has completely reorganised:
+
+| Donor | Type | Acceptor | E2 (kcal/mol) |
+|---|---|---|---|
+| BD(2) C6–C7 | aryl C–C π | BD\*(2) C11–N12 π\* | **46.01** |
+| BD(1) C6–C11 | aryl C–C σ | LP\*(2) N12 | **25.83** |
+| BD(1) C10–C11 | alkyl C–C σ | LP\*(2) N12 | **11.21** |
+| BD(1) C9–C10 | alkyl C–C σ | BD\*(1) C11–N12 σ\* | 5.16 |
+| BD(1) C6–C11 | aryl C–C σ | BD\*(1) C11–N12 σ\* | 2.68 |
+| BD(1) C10–C11 | alkyl C–C σ | BD\*(1) C11–N12 σ\* | 1.50 |
+
+### CN-handoff: the key observation
+
+Between R0 and R0+0.4 Å the virtual orbital landscape undergoes a qualitative change:
+
+- **At R0**: the dominant σ-acceptor is σ\*(N–O). Both C–C bonds donate into it; aryl wins 3.7×.
+- **At R0+0.4**: σ\*(N–O) is gone. The N12 lone-pair antibonding LP\*(2) and σ\*(C11–N12) have taken its place. Aryl still dominates into these new acceptors (25.83 vs 11.21 into LP\*N12), but the acceptor has fundamentally changed character — it now has CN-like antibonding character rather than NO-like.
+
+This is the CN-handoff event. The σ\*NO orbital acquires C11–N12 σ\* character as the N–O bond stretches, crossing over somewhere between R0 and R0+0.4 Å.
+
+**For mol_002_E (experiment = F):** even though aryl leads at equilibrium (Ψ=3.74), the virtual manifold reorganises toward C11–N12 character by R0+0.4. The aryl π system (46.01 kcal/mol into C11–N12 π\*) strongly stabilises the developing CN σ\* channel — possibly quenching the aryl migration pathway and allowing the alkyl fragmentation (C10–C11 cleavage) to win energetically.
+
+### What's still needed
+
+1. **Intermediate scan points (R0+0.1, +0.2, +0.3):** Set up 3 separate single-point NBO jobs at these geometries (extract from scan checkpoint) to get Ψ at all 5 points and compute d/dR properly.
+2. **CMO analysis (Λ, wCNmax):** Requires gennbo7 on a `.47` archive. The Stage 2 `_nbo.gjf` includes `ARCHIVE FILE=mol_002_E` to produce this file — submit Stage 2 and then run `gennbo.i8.exe mol_002_E.47` with CMO.
+3. **Remaining test set molecules (006, 020, 021):** Run the full pipeline so we have scan data for all 4 test molecules to compare CN-handoff across R vs F outcomes.
+
+---
+
 ## Implement Orbital Resolved Electron Routing Framework
 Goal: Implement orbital resolved electron routing framework: move beyond single point ground state analysis and perform relaxed potential energy surface (PES) scans to capture electronic reorganization preceding bond cleavage. Selective rearrangement is determined by a specific avoided crossing event in the virtual manifold as N-O bond elongates. 
 

@@ -155,16 +155,21 @@ def test_scan_gjf_exists(dft_opt_dir):
         assert (mol_dir / f"{name}_scan.gjf").exists(), f"Missing: {name}_scan.gjf"
 
 
-def test_scan_gjf_has_ModRedundant_and_CMO(dft_opt_dir):
-    """Scan file must request ModRedundant opt, have CMO in the NBO block, and a B scan line."""
+def test_scan_gjf_has_ModRedundant_and_E2PERT(dft_opt_dir):
+    """Scan file must request ModRedundant opt, have E2PERT in the NBO block, and a B scan line.
+
+    CMO is NOT included here — NBO 3.1 (bundled in g16) doesn't support it.
+    CMO descriptors (Lambda, wCNmax) come from a separate gennbo7 step on the
+    .47 archive written by Stage 2 (_nbo.gjf).
+    """
     for gjf in dft_opt_dir.glob("**/*_scan.gjf"):
         text = gjf.read_text()
-        assert "ModRedundant" in text,  f"{gjf.name}: missing 'ModRedundant' in route"
-        assert "pop=nboread" in text,   f"{gjf.name}: missing 'pop=nboread'"
+        assert "ModRedundant" in text,    f"{gjf.name}: missing 'ModRedundant' in route"
+        assert "pop=nboread" in text,     f"{gjf.name}: missing 'pop=nboread'"
         assert "geom=checkpoint" in text, f"{gjf.name}: missing 'geom=checkpoint'"
-        assert "%oldchk=" in text,      f"{gjf.name}: missing '%oldchk' line"
-        assert "CMO" in text,           f"{gjf.name}: missing 'CMO' in NBO block"
-        assert "E2PERT" in text,        f"{gjf.name}: missing 'E2PERT' in NBO block"
+        assert "%oldchk=" in text,        f"{gjf.name}: missing '%oldchk' line"
+        assert "E2PERT" in text,          f"{gjf.name}: missing 'E2PERT' in NBO block"
+        assert "CMO" not in text,         f"{gjf.name}: CMO must not appear (NBO 3.1 only)"
         lines = text.splitlines()
         scan_lines = [l for l in lines if l.startswith("B ") and " S " in l]
         assert scan_lines, f"{gjf.name}: missing 'B N O S 4 0.1' ModRedundant scan line"
