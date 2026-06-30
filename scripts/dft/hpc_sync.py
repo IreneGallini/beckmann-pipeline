@@ -59,7 +59,7 @@ def load_config() -> dict:
                 continue
             key, _, value = line.partition("=")
             config[key.strip()] = value.strip()
-    for key in ("HPC_HOST", "HPC_REMOTE_DIR", "G16_PATH"):
+    for key in ("HPC_HOST", "HPC_REMOTE_DIR", "G16_PATH", "NBOEXE"):
         if key in os.environ:
             config[key] = os.environ[key]
     return config
@@ -74,6 +74,20 @@ def require_config(config: dict) -> None:
         print("  3. HPC_REMOTE_DIR=~/beckmann/dft_opt", file=sys.stderr)
         print("  4. G16_PATH=/opt/g16/g16  (full path to g16 on the server)", file=sys.stderr)
         sys.exit(1)
+    if not config.get("NBOEXE"):
+        print("WARNING: NBOEXE not set — Gaussian will use bundled NBO 3.1 (no CMO support).", file=sys.stderr)
+        print("         Set NBOEXE=/opt/nbo7/bin/nbo7.i8.exe in .env to use NBO7.", file=sys.stderr)
+
+
+def _gauss_exports(config: dict) -> str:
+    """Build the export prefix for non-interactive SSH shells."""
+    g16          = config["G16_PATH"]
+    gauss_exedir = str(Path(g16).parent)
+    g16root      = str(Path(g16).parent.parent)
+    exports = f'export GAUSS_EXEDIR={gauss_exedir} && export g16root={g16root}'
+    if config.get("NBOEXE"):
+        exports += f' && export NBOEXE={config["NBOEXE"]}'
+    return exports
 
 
 def mol_dirs(local_dir: Path, mol: str | None) -> list[Path]:
@@ -127,15 +141,9 @@ def cmd_submit_opt(config: dict, dry_run: bool, mol: str | None, local_dir: Path
     host       = config["HPC_HOST"]
     remote_dir = config["HPC_REMOTE_DIR"]
     pattern    = f"mol_{mol.zfill(3)}_*" if mol else "*"
-    g16          = config["G16_PATH"]
-    gauss_exedir = str(Path(g16).parent)
-    g16root      = str(Path(g16).parent.parent)
-    # Export Gaussian env vars explicitly — non-interactive SSH shells do not
-    # source ~/.bashrc so GAUSS_EXEDIR and g16root would otherwise be unset,
-    # causing g16 to segfault on startup.
+    g16        = config["G16_PATH"]
     submit_cmd = (
-        f'export GAUSS_EXEDIR={gauss_exedir} && '
-        f'export g16root={g16root} && '
+        f'{_gauss_exports(config)} && '
         f'cd {remote_dir} && '
         f'for dir in {pattern}/; do '
         '  name="${dir%/}"; '
@@ -156,13 +164,10 @@ def cmd_submit_nbo(config: dict, dry_run: bool, mol: str | None, local_dir: Path
         "         Only proceed once ALL opt jobs have COMPLETED.\n"
         "         Check first: python scripts/dft/hpc_sync.py status"
     )
-    pattern      = f"mol_{mol.zfill(3)}_*" if mol else "*"
-    g16          = config["G16_PATH"]
-    gauss_exedir = str(Path(g16).parent)
-    g16root      = str(Path(g16).parent.parent)
+    pattern = f"mol_{mol.zfill(3)}_*" if mol else "*"
+    g16     = config["G16_PATH"]
     submit_cmd = (
-        f'export GAUSS_EXEDIR={gauss_exedir} && '
-        f'export g16root={g16root} && '
+        f'{_gauss_exports(config)} && '
         f'cd {remote_dir} && '
         f'for dir in {pattern}/; do '
         '  name="${dir%/}"; '
@@ -183,13 +188,10 @@ def cmd_submit_scan(config: dict, dry_run: bool, mol: str | None, local_dir: Pat
         "         Only proceed once ALL opt jobs show Normal termination.\n"
         "         Check first: python scripts/dft/hpc_sync.py status"
     )
-    pattern      = f"mol_{mol.zfill(3)}_*" if mol else "*"
-    g16          = config["G16_PATH"]
-    gauss_exedir = str(Path(g16).parent)
-    g16root      = str(Path(g16).parent.parent)
+    pattern = f"mol_{mol.zfill(3)}_*" if mol else "*"
+    g16     = config["G16_PATH"]
     submit_cmd = (
-        f'export GAUSS_EXEDIR={gauss_exedir} && '
-        f'export g16root={g16root} && '
+        f'{_gauss_exports(config)} && '
         f'cd {remote_dir} && '
         f'for dir in {pattern}/; do '
         '  name="${dir%/}"; '
@@ -206,12 +208,9 @@ def cmd_submit_sp(config: dict, dry_run: bool, mol: str | None, local_dir: Path)
     host       = config["HPC_HOST"]
     remote_dir = config["HPC_REMOTE_DIR"]
     pattern    = f"mol_{mol.zfill(3)}_*" if mol else "*"
-    g16          = config["G16_PATH"]
-    gauss_exedir = str(Path(g16).parent)
-    g16root      = str(Path(g16).parent.parent)
+    g16        = config["G16_PATH"]
     submit_cmd = (
-        f'export GAUSS_EXEDIR={gauss_exedir} && '
-        f'export g16root={g16root} && '
+        f'{_gauss_exports(config)} && '
         f'cd {remote_dir} && '
         f'for dir in {pattern}/; do '
         '  name="${dir%/}"; '

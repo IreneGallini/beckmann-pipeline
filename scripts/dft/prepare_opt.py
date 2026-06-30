@@ -39,9 +39,11 @@ NPROC        = 8
 MEM_GB       = 16
 CHARGE       = 1
 MULTIPLICITY = 1
-# CMO keyword requires NBO7 (separately licensed). Citadel runs NBO 3.1 (bundled
-# with Gaussian 16), which does not support CMO. Add CMO here only if NBO7 is
-# installed and linked on the cluster.
+# CMO requires NBO7 linked into the Gaussian build (NBOEXE mechanism).
+# Citadel's g16 does not support NBOEXE — l607.exe (NBO 3.1) runs regardless.
+# Remove CMO until the admin links NBO7 into g16 (or provides a patched l607.exe).
+# With the current setup, E2PERT+BNDIDX+NBOSUM enable Psi and d/dR descriptors.
+# Lambda and wCNmax (CMO-based) are deferred.
 NBO_KEYWORDS = "E2PERT BNDIDX NBOSUM"
 # ──────────────────────────────────────────────────────────────────────────────
 
