@@ -54,6 +54,45 @@ def test_aimnet_covers_all_step1_molecules(aimnet_sdf_path, conformers_sdf_path)
     )
 
 
+def test_best_per_substrate_exists(best_per_substrate_sdf_path):
+    assert best_per_substrate_sdf_path.exists()
+
+
+def test_best_per_substrate_one_per_base(best_per_substrate_sdf_path):
+    """best_per_substrate.sdf must have exactly one entry per base substrate."""
+    names: list[str] = []
+    for mol in Chem.SDMolSupplier(str(best_per_substrate_sdf_path), removeHs=False):
+        if mol is not None:
+            names.append(mol.GetProp("_Name"))
+    base_ids = [n.rsplit("_", 1)[0] for n in names]
+    duplicates = [b for b in set(base_ids) if base_ids.count(b) > 1]
+    assert not duplicates, f"Multiple isomers for same substrate: {duplicates}"
+
+
+def test_best_per_substrate_is_lowest_energy(best_per_substrate_sdf_path, aimnet_sdf_path):
+    """Each entry in best_per_substrate.sdf must be the lower-energy isomer."""
+    all_energies: dict[str, dict[str, float]] = {}
+    for mol in Chem.SDMolSupplier(str(aimnet_sdf_path), removeHs=False):
+        if mol is None:
+            continue
+        name = mol.GetProp("_Name")
+        base = name.rsplit("_", 1)[0]
+        e = float(mol.GetProp("E_aimnet2_eV"))
+        all_energies.setdefault(base, {})[name] = e
+
+    for mol in Chem.SDMolSupplier(str(best_per_substrate_sdf_path), removeHs=False):
+        if mol is None:
+            continue
+        name = mol.GetProp("_Name")
+        base = name.rsplit("_", 1)[0]
+        e_chosen = float(mol.GetProp("E_aimnet2_eV"))
+        e_min = min(all_energies[base].values())
+        assert math.isclose(e_chosen, e_min, rel_tol=1e-6), (
+            f"{base}: chosen isomer {name} has E={e_chosen:.6f} eV "
+            f"but minimum is {e_min:.6f} eV"
+        )
+
+
 def test_rmsd_step1_to_step2(aimnet_sdf_path, conformers_sdf_path):
     """AIMNet2 opt should fine-tune geometry, not rebuild it (RMSD < 2.0 Å)."""
     step1_best: dict[str, tuple[float, Chem.Mol]] = {}

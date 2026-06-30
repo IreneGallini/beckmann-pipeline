@@ -1,7 +1,12 @@
 """
-Step 2: select lowest-energy conformer per molecule, run AIMNet2 optimization
-Input: Reads result SDF from 01_smiles_to_conformers.py
-Output: one geometry per molecule in data/output/aimnet_optimized/best_aimnet_optimized.sdf
+Step 2: select lowest-energy conformer per molecule, run AIMNet2 optimization.
+
+Writes two output files:
+  best_aimnet_optimized.sdf  - one optimized structure per isomer name (mol_XXX_E / mol_XXX_Z)
+  best_per_substrate.sdf     - one structure per substrate (lowest-energy isomer wins)
+
+Downstream DFT scripts read from best_per_substrate.sdf so only one geometry
+per substrate goes to Gaussian, not both E and Z isomers.
 """
 import os
 import warnings
@@ -59,29 +64,27 @@ print(f"\nRunning AIMNet2 optimization on {len(best_conformers)} structure(s)...
 base_calc = AIMNet2Calculator("aimnet2_2025")
 writer = Chem.SDWriter(str(output_dir / "best_aimnet_optimized.sdf"))
 
+optimized: dict[str, tuple[float, Chem.Mol]] = {}  # name -> (energy_ev, mol)
+
 for name, mol in best_conformers.items():
     print(f"  Optimizing {name}...")
     try:
-        # Convert RDKit mol to ASE Atoms
         conf    = mol.GetConformer()
         coords  = conf.GetPositions()
         numbers = [atom.GetAtomicNum() for atom in mol.GetAtoms()]
         atoms   = Atoms(numbers=numbers, positions=coords)
 
-        # Attach AIMNet2 calculator; charge is auto-detected from formal charges
-        # (0 for neutral oximes, +1 for protonated C=N-[OH2+] benchmark structures)
+        # Charge is auto-detected from formal charges
+        # (+1 for protonated C=N-[OH2+] benchmark structures)
         mol_charge = sum(atom.GetFormalCharge() for atom in mol.GetAtoms())
         atoms.calc = AIMNet2ASE(base_calc, charge=mol_charge)
 
-        # Run optimization
         opt = LBFGS(atoms, logfile=None)
         opt.run(fmax=0.05)  # convergence: max force < 0.05 eV/Å
 
-        # Get final energy
         energy_ev   = atoms.get_potential_energy()
         energy_kcal = energy_ev * 23.0605
 
-        # Write back optimized coords to RDKit mol
         new_conf = mol.GetConformer()
         for i, pos in enumerate(atoms.get_positions()):
             new_conf.SetAtomPosition(i, pos.tolist())
@@ -90,15 +93,30 @@ for name, mol in best_conformers.items():
         mol.SetProp("E_aimnet2_eV",   f"{energy_ev:.6f}")
         mol.SetProp("E_aimnet2_kcal", f"{energy_kcal:.4f}")
         writer.write(mol)
+        optimized[name] = (energy_ev, mol)
 
         print(f"    AIMNet2 E = {energy_ev:.6f} eV ({energy_kcal:.2f} kcal/mol)")
-    
-        
+
     except Exception as e:
         print(f"    WARNING: AIMNet2 optimization failed for {name}: {e}")
 
 writer.close()
+
+# Select the lowest-energy isomer per substrate (e.g. mol_001_E vs mol_001_Z → keep one)
+substrate_best: dict[str, tuple[float, Chem.Mol]] = {}
+for name, (energy_ev, mol) in optimized.items():
+    base = name.rsplit("_", 1)[0]  # mol_001_E → mol_001
+    if base not in substrate_best or energy_ev < substrate_best[base][0]:
+        substrate_best[base] = (energy_ev, mol)
+
+writer2 = Chem.SDWriter(str(output_dir / "best_per_substrate.sdf"))
+for base in sorted(substrate_best):
+    _, mol = substrate_best[base]
+    writer2.write(mol)
+writer2.close()
+
 print(f"\nDone. Optimized structures saved to:")
-print(f"  {output_dir / 'best_aimnet_optimized.sdf'}")
+print(f"  {output_dir / 'best_aimnet_optimized.sdf'}  ({len(optimized)} isomers)")
+print(f"  {output_dir / 'best_per_substrate.sdf'}  ({len(substrate_best)} substrates, lowest-energy isomer only)")
 
 

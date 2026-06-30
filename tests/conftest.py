@@ -54,6 +54,14 @@ def aimnet_sdf_path(project_root):
 
 
 @pytest.fixture(scope="session")
+def best_per_substrate_sdf_path(project_root):
+    p = project_root / "data" / "output" / "aimnet_optimized" / "best_per_substrate.sdf"
+    if not p.exists():
+        pytest.skip("best_per_substrate.sdf not found — run scripts/02_select_and_optimize.py")
+    return p
+
+
+@pytest.fixture(scope="session")
 def benchmark_csv_path(project_root):
     p = project_root / "data" / "output" / "week1_benchmark_results.csv"
     if not p.exists():

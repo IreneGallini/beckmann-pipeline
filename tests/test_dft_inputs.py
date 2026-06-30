@@ -58,10 +58,10 @@ def test_sp_nbo_block_present(dft_sp_dir):
         assert "E2PERT" in text, f"{gjf.name}: missing E2PERT keyword in $NBO block"
 
 
-def test_sp_oxime_label_matches_sdf(dft_sp_dir, aimnet_sdf_path):
+def test_sp_oxime_label_matches_sdf(dft_sp_dir, best_per_substrate_sdf_path):
     """[oxime: C=N-O] label in each .gjf must match the RDKit substructure match."""
     sdf_mols: dict[str, Chem.Mol] = {}
-    for mol in Chem.SDMolSupplier(str(aimnet_sdf_path), removeHs=False):
+    for mol in Chem.SDMolSupplier(str(best_per_substrate_sdf_path), removeHs=False):
         if mol is not None:
             sdf_mols[mol.GetProp("_Name")] = mol
 
@@ -94,13 +94,16 @@ def dft_opt_dir(project_root):
 
 
 def test_opt_test_set_has_both_stages(dft_opt_dir):
-    """Each test-set molecule must have _opt.gjf (Stage 1) and _nbo.gjf (Stage 2)."""
+    """Each test-set substrate must have exactly one mol directory with _opt.gjf and _nbo.gjf."""
     for mol_id in TEST_SET:
-        for isomer in ("E", "Z"):
-            name = f"mol_{mol_id}_{isomer}"
-            mol_dir = dft_opt_dir / name
-            assert (mol_dir / f"{name}_opt.gjf").exists(), f"Missing: {name}_opt.gjf"
-            assert (mol_dir / f"{name}_nbo.gjf").exists(), f"Missing: {name}_nbo.gjf"
+        dirs = list(dft_opt_dir.glob(f"mol_{mol_id}_*/"))
+        assert len(dirs) == 1, (
+            f"mol_{mol_id}: expected 1 directory (lowest-energy isomer only), found {len(dirs)}"
+        )
+        mol_dir = dirs[0]
+        name = mol_dir.name
+        assert (mol_dir / f"{name}_opt.gjf").exists(), f"Missing: {name}_opt.gjf"
+        assert (mol_dir / f"{name}_nbo.gjf").exists(), f"Missing: {name}_nbo.gjf"
 
 
 def test_opt_gjf_route_has_opt_not_nbo(dft_opt_dir):

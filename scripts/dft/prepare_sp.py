@@ -54,7 +54,7 @@ def _gjf(name: str, coords: list[tuple], oxime_label: str) -> str:
 
 def main() -> None:
     root   = Path(__file__).parent.parent.parent
-    sdf    = root / "data" / "output" / "aimnet_optimized" / "best_aimnet_optimized.sdf"
+    sdf    = root / "data" / "output" / "aimnet_optimized" / "best_per_substrate.sdf"
     outdir = root / "data" / "output" / "dft_sp"
     outdir.mkdir(parents=True, exist_ok=True)
 
