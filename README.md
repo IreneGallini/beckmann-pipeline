@@ -27,7 +27,7 @@ beckmann-pipeline/
 │       ├── dft_sp/                 single-point Gaussian inputs + logs
 │       └── dft_opt/                two-stage opt+NBO inputs + logs
 ├── app.py                          Flask web UI
-├── tests/test_draft.py
+├── tests/
 ├── .env.example                    HPC config template (copy to .env, gitignored)
 └── environment.yml                 conda env spec
 ```
@@ -50,7 +50,7 @@ python scripts/01_smiles_to_conformers.py  # conformer generation
 python scripts/02_select_and_optimize.py   # AIMNet2 geometry opt
 ```
 
-DFT phase — prepare inputs, then use `hpc_sync.py` to submit to Citadel:
+DFT phase - prepare inputs, then use `hpc_sync.py` to submit to Citadel:
 
 ```bash
 # Option A: single-point NBO on AIMNet2 geometry (all 34 molecules)
@@ -62,7 +62,7 @@ python scripts/dft/prepare_opt.py
 
 ## Baseline analysis
 
-`scripts/analysis/classical_rule_benchmark.py` tests whether the classical anti-periplanar dihedral rule alone can predict rearrangement vs. fragmentation. It is a one-off analysis to motivate the DFT/NBO approach — not a step that runs on new molecules.
+`scripts/analysis/classical_rule_benchmark.py` tests whether the classical anti-periplanar dihedral rule alone can predict rearrangement vs. fragmentation. It is a one-off analysis to motivate the DFT/NBO approach - not a step that runs on new molecules.
 
 ```bash
 python scripts/analysis/classical_rule_benchmark.py
@@ -72,34 +72,34 @@ Output: `data/output/analysis/classical_rule_results.csv`
 
 ## DFT output files
 
-### `data/output/dft_opt/{name}/` — two-stage opt + NBO
+### `data/output/dft_opt/{name}/` - two-stage opt + NBO
 
 | File | In git | What it is |
 |---|---|---|
-| `{name}_opt.gjf` | yes | Gaussian input — Stage 1 geometry optimisation (`wB97XD/6-311+G(d,p) opt`). Starting geometry from AIMNet2. |
-| `{name}_opt.log` | no | Gaussian output — Stage 1. SCF iterations, geometry steps, converged geometry. Must end with "Normal termination". |
-| `{name}_nbo.gjf` | yes | Gaussian input — Stage 2 NBO single-point (`sp pop=nboread geom=checkpoint`). Reads geometry from `_opt.chk`. Run after Stage 1. |
-| `{name}_nbo.log` | no | Gaussian output — Stage 2. NBO analysis: E2PERT donor→acceptor table, Wiberg bond indices, NBO summary. Primary output for CN-handoff analysis. |
+| `{name}_opt.gjf` | yes | Gaussian input - Stage 1 geometry optimisation (`wB97XD/6-311+G(d,p) opt`). Starting geometry from AIMNet2. |
+| `{name}_opt.log` | no | Gaussian output - Stage 1. SCF iterations, geometry steps, converged geometry. Must end with "Normal termination". |
+| `{name}_nbo.gjf` | yes | Gaussian input - Stage 2 NBO single-point (`sp pop=nboread geom=checkpoint`). Reads geometry from `_opt.chk`. Run after Stage 1. |
+| `{name}_nbo.log` | no | Gaussian output - Stage 2. NBO analysis: E2PERT donor→acceptor table, Wiberg bond indices, NBO summary. Primary output for CN-handoff analysis. |
 
 Files that stay on the cluster only:
 
 | File | What it is |
 |---|---|
-| `{name}_opt.chk` | Binary checkpoint from Stage 1 — stores converged wavefunction and DFT geometry. Required by Stage 2. |
-| `Gau-XXXXXX.rwf / .inp` | Gaussian scratch files — deleted on normal termination. If they persist, the job crashed. |
+| `{name}_opt.chk` | Binary checkpoint from Stage 1 - stores converged wavefunction and DFT geometry. Required by Stage 2. |
+| `Gau-XXXXXX.rwf / .inp` | Gaussian scratch files - deleted on normal termination. If they persist, the job crashed. |
 
-### `data/output/dft_sp/{name}/` — single-point NBO on AIMNet2 geometry
+### `data/output/dft_sp/{name}/` - single-point NBO on AIMNet2 geometry
 
 | File | In git | What it is |
 |---|---|---|
-| `{name}.gjf` | yes | Gaussian input — single-point NBO directly on AIMNet2 geometry. No DFT re-optimisation. |
+| `{name}.gjf` | yes | Gaussian input - single-point NBO directly on AIMNet2 geometry. No DFT re-optimisation. |
 | `{name}.log` | no | Gaussian output with NBO analysis. |
 
 **Reading NBO output:** atom indices in the NBO log match the `[oxime: C{ci}=N{ni}-O{oi}]` label in each `.gjf` title line. Search the `_nbo.log` for `E2PERT` to find donor→acceptor interactions; `BD* N–O` entries show which σ bonds donate into the N–O antibond (the key descriptor for CN-handoff analysis).
 
 ## HPC submission (Citadel)
 
-Citadel (`citadel.chem.cmu.edu`) is a shared compute server — no SLURM. Jobs run directly via `g16`. Use `scripts/dft/hpc_sync.py`:
+Citadel (`citadel.chem.cmu.edu`) is a shared compute server - no SLURM. Jobs run directly via `g16`. Use `scripts/dft/hpc_sync.py`:
 
 ```bash
 # Copy config template and fill in your details
@@ -125,4 +125,4 @@ Tests cover: imports, conformer count (≤5 per molecule), AIMNet2 energy decrea
 
 ## Baseline result
 
-The classical anti-periplanar dihedral rule gives **20/34 correct predictions (59%)** on the benchmark set. Failures concentrate in substrates where aryl is geometrically anti but fragmentation dominates — consistent with ground-state orbital character (CN-handoff) governing selectivity beyond geometry alone. This motivates the DFT/NBO phase.
+The classical anti-periplanar dihedral rule gives **20/34 correct predictions (59%)** on the benchmark set. Failures concentrate in substrates where aryl is geometrically anti but fragmentation dominates - consistent with ground-state orbital character (CN-handoff) governing selectivity beyond geometry alone. This motivates the DFT/NBO phase.
