@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "beckmann"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[project.scripts]
+beckmann-oximes     = "beckmann.oximes:main"
+beckmann-conformers = "beckmann.conformers:main"
+beckmann-optimize   = "beckmann.optimize:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["beckmann*"]
