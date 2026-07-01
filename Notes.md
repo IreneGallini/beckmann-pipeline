@@ -4,18 +4,18 @@ Gaussian numbers atoms by their position in the coordinate block atom 1 is the f
 The label [oxime: C3=N2-O1] in the .gjf title is a human-readable bookmark: "in this particular file, the C=N–O atoms are at positions 3, 2, 1." When you later parse NBO output for the C=N π-bond or the N–O σ* orbital, you know exactly which atom numbers to look for without opening Avogadro.
 
 ---
-Step 1 — SMARTS pattern
+Step 1 SMARTS pattern
 
 OXIME_PAT = Chem.MolFromSmarts('[C:1]=[N:2]-[O+:3]')
 
 This is a SMARTS query with atom map numbers (:1, :2, :3). The SMARTS encodes the connectivity of the activated protonated oxime:
-- [C:1] — any carbon, labelled 1
-- =[N:2] — double bond to any nitrogen, labelled 2
-- -[O+:3] — single bond to a positively charged oxygen (the [OH2+]), labelled 3
+- [C:1] any carbon, labelled 1
+- =[N:2] double bond to any nitrogen, labelled 2
+- -[O+:3] single bond to a positively charged oxygen (the [OH2+]), labelled 3
 
-The [O+] is the key fix from earlier — the neutral [OH1] pattern never matched because our molecules are protonated activated oximes (C=N-[OH2+]), not neutral hydroxylamine oximes.
+The [O+] is the key fix from earlier the neutral [OH1] pattern never matched because our molecules are protonated activated oximes (C=N-[OH2+]), not neutral hydroxylamine oximes.
 
-Step 2 — substructure match
+Step 2 substructure match
 
 match = mol.GetSubstructMatch(OXIME_PAT)
 
@@ -24,7 +24,7 @@ GetSubstructMatch returns a tuple of RDKit atom indices (0-based) for the atoms 
 - atom index 1 → N (map label 2)
 - atom index 0 → O (map label 3)
 
-Step 3 — convert to Gaussian 1-based numbering
+Step 3 convert to Gaussian 1-based numbering
 
 ci, ni, oi = (idx + 1 for idx in match)
 oxime_label = f"[oxime: C{ci}=N{ni}-O{oi}]"
@@ -39,7 +39,7 @@ When the Gaussian job finishes, the NBO7 output will contain entries like:
      ...
      E2PERT:  BD*(1) N  2 - O  1 /  BD  C  3 - N  2   15.3 kcal/mol
 
-Because the .gjf title already says [oxime: C3=N2-O1], you can write a parser that reads the label, extracts the three atom numbers, and uses them as keys to pull the right NBOs out of the output — without hard-coding any indices. The same parsing logic will work for all 68 molecules because each file carries its own map.
+Because the .gjf title already says [oxime: C3=N2-O1], you can write a parser that reads the label, extracts the three atom numbers, and uses them as keys to pull the right NBOs out of the output without hard-coding any indices. The same parsing logic will work for all 68 molecules because each file carries its own map.
 
 The connection to the tests
 
@@ -48,7 +48,6 @@ test_step3_oxime_atom_map_matches_sdf closes the loop: it reads each .gjf back, 
 # Testing HPC steps
 Set of 5 and 6 membered substrates with methyl or methoxy substituents in position 4 
 - mols: 2, 6, 20, 21
-
 
 ## NBO Output: mol_002_E (first completed DFT run)
 
@@ -65,10 +64,10 @@ This means in the coordinate block (and in all NBO output line references):
 - Atom 13 = O (the protonated leaving group, OH2+)
 
 The two C–C bonds flanking the oxime carbon C11:
-- **C6–C11**: aryl bond — connects the aromatic ring (C6 is the ipso-like ring carbon) to the oxime carbon
-- **C10–C11**: alkyl bond — the methylene carbon on the other side of the ring
+- **C6–C11**: aryl bond connects the aromatic ring (C6 is the ipso-like ring carbon) to the oxime carbon
+- **C10–C11**: alkyl bond the methylene carbon on the other side of the ring
 
-These two bonds are the candidates for migration. In classical Beckmann, the bond anti to the leaving group migrates. In the CN-handoff picture, the bond that donates more strongly into the N–O σ* (and reorganises the virtual manifold) is the one that migrates — or fragments.
+These two bonds are the candidates for migration. In classical Beckmann, the bond anti to the leaving group migrates. In the CN-handoff picture, the bond that donates more strongly into the N–O σ* (and reorganises the virtual manifold) is the one that migrates or fragments.
 
 ### E2PERT key interactions
 
@@ -82,7 +81,7 @@ These two bonds are the candidates for migration. In classical Beckmann, the bon
 
 The aryl bond donates ~3.7× more strongly into the breaking N–O bond. A naive E2 analysis would predict aryl migration → rearrangement. The experiment gives fragmentation.
 
-**Donors into BD\*(1) and BD\*(2) C11=N12** (the C=N σ\* and π\* — relevant for CN-handoff):
+**Donors into BD\*(1) and BD\*(2) C11=N12** (the C=N σ\* and π\* relevant for CN-handoff):
 
 | Donor | Bond type | Acceptor | E2 (kcal/mol) |
 |---|---|---|---|
@@ -117,7 +116,7 @@ For each molecule, using the `[oxime: C{ci}=N{ni}-O{oi}]` label from the `.gjf` 
 6. Wiberg bond indices for N{ni}–O{oi}, C{ci}–N{ni}, C_aryl–C{ci}, C_alkyl–C{ci} (from BNDIDX)
 
 **Key challenge:** identifying which neighbour of C{ci} is aryl and which is alkyl without hard-coding atom numbers. Two approaches:
-- Use RDKit on the SDF to label the two C{ci} neighbours before running NBO — write aryl atom index into the `.gjf` title alongside the oxime label (e.g. `[oxime: C11=N12-O13 | aryl=C6 alkyl=C10]`)
+- Use RDKit on the SDF to label the two C{ci} neighbours before running NBO write aryl atom index into the `.gjf` title alongside the oxime label (e.g. `[oxime: C11=N12-O13 | aryl=C6 alkyl=C10]`)
 - In the parser, identify them from BNDIDX: the aryl neighbour will have a Wiberg C–C index > 1.3 (aromatic), the alkyl will be near 1.0
 
 The extended label approach is cleaner because it keeps all atom assignments in one place and does not require bond order logic in the parser.
@@ -132,9 +131,9 @@ Each molecule in the benchmark has a different atom map because RDKit writes ato
 
 The test `test_sp_oxime_label_matches_sdf` already verifies the label is correct for all 34 molecules. When parse_nbo.py is added, a corresponding test should verify that the parser extracts a non-null E2 value for at least the two C–C → N–O σ\* entries in every completed log.
 
-## N–O Bond Scan: mol_002_E (Stage 3 — relaxed PES scan)
+## N–O Bond Scan: mol_002_E (Stage 3 relaxed PES scan)
 
-**Job:** `mol_002_E_scan.gjf` — `wB97XD/6-311+G(d,p) opt=(ModRedundant,MaxCycles=200) pop=nboread geom=checkpoint`
+**Job:** `mol_002_E_scan.gjf`  `wB97XD/6-311+G(d,p) opt=(ModRedundant,MaxCycles=200) pop=nboread geom=checkpoint`
 **Scan:** N12–O13 bond stretched from R0 in 4 steps of 0.1 Å (5 points: R0 to R0+0.4 Å)
 **NBO keywords:** `E2PERT BNDIDX NBOSUM`
 **Status:** Normal termination (20 min wall time, 2h 47min CPU)
@@ -147,7 +146,7 @@ Gaussian ran NBO **twice**, not five times:
 
 Intermediate points (R0+0.1, +0.2, +0.3) did not produce separate NBO output. This is a Gaussian behaviour with `opt=(ModRedundant)` + `pop=nboread`: population analysis runs at the initial and final geometries only, not at each intermediate scan point. To get all 5 NBO analyses, we need 5 separate single-point NBO jobs at fixed N–O distances (or 3 additional jobs for the missing intermediate points).
 
-### E2PERT at R0 (equilibrium, from Stage 2 _nbo.log — confirmed in scan)
+### E2PERT at R0 (equilibrium, from Stage 2 _nbo.log confirmed in scan)
 
 Atom map: C11=N12–O13 | aryl=C6, alkyl=C10
 
@@ -200,7 +199,7 @@ The decreasing Ψ slope (d/dR = −3.6 Å⁻¹) means aryl's relative advantage 
 
 ### What's still needed
 
-1. **CMO analysis (Λ, wCNmax):** Requires gennbo7 on a `.47` archive. The Stage 2 `_nbo.gjf` includes `ARCHIVE FILE=mol_002_E` — submit Stage 2 then run `gennbo.i8.exe mol_002_E.47` with CMO.
+1. **CMO analysis (Λ, wCNmax):** Requires gennbo7 on a `.47` archive. The Stage 2 `_nbo.gjf` includes `ARCHIVE FILE=mol_002_E` submit Stage 2 then run `gennbo.i8.exe mol_002_E.47` with CMO.
 2. **Remaining test set molecules (006, 020, 021):** Run the full pipeline so we have scan data for all 4 test molecules to compare CN-handoff across R vs F outcomes.
 
 ---
