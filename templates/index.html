@@ -151,6 +151,49 @@
       line-height: 1.8;
     }
 
+    .verdict-box {
+      border-radius: 8px;
+      padding: 18px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+    .verdict-box-R       { background: #f0faf3; border: 2px solid #1a7a34; }
+    .verdict-box-F       { background: #fff5f5; border: 2px solid #b91c1c; }
+    .verdict-box-inspect { background: #f4f4f5; border: 2px solid #6b7280; }
+
+    .verdict-icon {
+      font-size: 2.4rem;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .verdict-title {
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+    .verdict-title-R       { color: #1a7a34; }
+    .verdict-title-F       { color: #b91c1c; }
+    .verdict-title-inspect { color: #6b7280; }
+
+    .verdict-sub {
+      font-size: 0.85rem;
+      color: #556;
+      margin-top: 3px;
+      line-height: 1.4;
+    }
+
+    .results-section-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #999;
+      margin-bottom: 10px;
+    }
+
     .conformer-card {
       border: 1px solid #e0e4eb;
       border-radius: 7px;
@@ -263,7 +306,7 @@
   <div class="panel" id="results-panel">
     <div class="empty-state" id="empty-state">
       Results will appear here after running the prediction.<br>
-      <span style="font-size:0.82rem;">Pipeline takes ~1&#8211;2 min (Auto3D + AIMNet2 optimization)</span>
+      <span style="font-size:0.82rem;">Pipeline takes 1&#8211;2 min (Auto3D + AIMNet2 optimization)</span>
     </div>
     <div id="results-container"></div>
   </div>
@@ -340,14 +383,44 @@
         setStatus('');
         document.getElementById('run-btn').disabled = false;
       }
-      // 'running' — keep polling
-    } catch (_) { /* network hiccup — keep polling */ }
+      // 'running' keep polling
+    } catch (_) { /* network hiccup keep polling */ }
   }
 
   function renderResults(conformers) {
     document.getElementById('empty-state').style.display = 'none';
     const container = document.getElementById('results-container');
     container.innerHTML = '';
+
+    // Overall verdict: pick the prediction from the lowest-energy conformer
+    const sorted = [...conformers].sort((a, b) => (a.energy_ev ?? 0) - (b.energy_ev ?? 0));
+    const best   = sorted[0];
+    const pred   = best ? best.classical_pred : 'inspect';
+    const verdictCls   = pred === 'R' ? 'verdict-box-R' : pred === 'F' ? 'verdict-box-F' : 'verdict-box-inspect';
+    const verdictTitle = pred === 'R' ? 'Rearrangement' : pred === 'F' ? 'Fragmentation' : 'Inconclusive';
+    const verdictTitleCls = pred === 'R' ? 'verdict-title-R' : pred === 'F' ? 'verdict-title-F' : 'verdict-title-inspect';
+    const verdictIcon  = pred === 'R' ? '&#x2192;' : pred === 'F' ? '&#x2702;' : '&#x3f;';
+    const verdictSub   = pred === 'R'
+      ? `Aryl group predicted to migrate &mdash; lowest-energy isomer (${best.name}), O&ndash;N&ndash;C(aryl) = ${best.d_aryl != null ? best.d_aryl.toFixed(1) + '&deg;' : 'n/a'}`
+      : pred === 'F'
+      ? `C&ndash;C bond cleavage predicted &mdash; lowest-energy isomer (${best.name}), O&ndash;N&ndash;C(allyl) = ${best.d_allyl != null ? best.d_allyl.toFixed(1) + '&deg;' : 'n/a'}`
+      : `Neither group is anti-periplanar (&ge;150&deg;) &mdash; geometry does not predict a clear outcome`;
+
+    const verdictEl = document.createElement('div');
+    verdictEl.className = 'verdict-box ' + verdictCls;
+    verdictEl.innerHTML = `
+      <div class="verdict-icon">${verdictIcon}</div>
+      <div>
+        <div class="verdict-title ${verdictTitleCls}">${verdictTitle}</div>
+        <div class="verdict-sub">${verdictSub}</div>
+      </div>
+    `;
+    container.appendChild(verdictEl);
+
+    const isomerLabel = document.createElement('div');
+    isomerLabel.className = 'results-section-label';
+    isomerLabel.textContent = 'Oxime isomers';
+    container.appendChild(isomerLabel);
 
     conformers.forEach((c, i) => {
       const pred       = c.classical_pred;
