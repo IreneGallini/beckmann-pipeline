@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Beckmann Rearrangement Predictor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #1a3a5c;
+      color: white;
+      padding: 14px 28px;
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+    }
+    header h1 { font-size: 1.15rem; font-weight: 600; }
+    header p  { font-size: 0.82rem; opacity: 0.75; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 500px 1fr;
+      gap: 20px;
+      padding: 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+      align-items: start;
+    }
+
+    .panel {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.10);
+    }
+
+    .section-label {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #667;
+      margin-bottom: 8px;
+    }
+
+    #ketcher-frame {
+      width: 100%;
+      height: 390px;
+      border: 1px solid #dde;
+      border-radius: 5px;
+      display: block;
+    }
+
+    .btn-use-ketcher {
+      width: 100%;
+      margin-top: 8px;
+      padding: 8px;
+      background: #eef2f7;
+      border: 1px solid #cdd5e0;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      color: #334;
+    }
+    .btn-use-ketcher:hover { background: #dde5f0; }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 14px 0;
+      color: #aaa;
+      font-size: 0.78rem;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #e0e0e0;
+    }
+
+    #smiles-input {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.88rem;
+      color: #223;
+    }
+    #smiles-input:focus { outline: none; border-color: #1a3a5c; box-shadow: 0 0 0 2px rgba(26,58,92,0.15); }
+
+    #run-btn {
+      width: 100%;
+      margin-top: 14px;
+      padding: 11px;
+      background: #1a3a5c;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.02em;
+    }
+    #run-btn:hover:not(:disabled) { background: #244e7a; }
+    #run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #status-line {
+      margin-top: 10px;
+      font-size: 0.84rem;
+      color: #557;
+      min-height: 1.3em;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 11px; height: 11px;
+      border: 2px solid #c8d0db;
+      border-top-color: #1a3a5c;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-msg {
+      margin-top: 10px;
+      padding: 9px 13px;
+      background: #fff0f0;
+      border: 1px solid #f5c6c6;
+      border-radius: 5px;
+      font-size: 0.85rem;
+      color: #b00;
+    }
+
+    .empty-state {
+      padding: 60px 0;
+      text-align: center;
+      color: #aaa;
+      font-size: 0.92rem;
+      line-height: 1.8;
+    }
+
+    .conformer-card {
+      border: 1px solid #e0e4eb;
+      border-radius: 7px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .card-name {
+      font-weight: 700;
+      font-size: 1rem;
+      font-family: 'Courier New', monospace;
+    }
+
+    .card-energy {
+      font-size: 0.84rem;
+      color: #667;
+    }
+
+    .badge {
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+    }
+    .badge-R       { background: #d4edda; color: #145a24; }
+    .badge-F       { background: #f8d7da; color: #7a1c24; }
+    .badge-inspect { background: #e9ecef; color: #495057; }
+
+    .dihedrals {
+      font-size: 0.8rem;
+      color: #778;
+      font-family: 'Courier New', monospace;
+      margin-bottom: 12px;
+    }
+
+    .viewer-div {
+      width: 100%;
+      height: 280px;
+      border: 1px solid #eee;
+      border-radius: 5px;
+      overflow: hidden;
+      position: relative;
+      background: #fafafa;
+    }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Beckmann Rearrangement Predictor</h1>
+  <p>AIMNet2 geometry &middot; classical anti-periplanar rule</p>
+</header>
+
+<div class="layout">
+
+  <!-- Left: input -->
+  <div class="panel">
+    <div class="section-label">Draw substrate</div>
+    <iframe id="ketcher-frame" src="/static/ketcher/index.html" title="Ketcher chemical structure editor"></iframe>
+    <button class="btn-use-ketcher" onclick="getFromKetcher()">&#8595; Use structure from Ketcher</button>
+
+    <div class="divider">or enter SMILES directly</div>
+
+    <input id="smiles-input" type="text" placeholder="e.g. O=C1CCC2=CC=CC=C21  (&alpha;-tetralone)" />
+
+    <button id="run-btn" onclick="runPrediction()">Run Prediction</button>
+    <div id="status-line"></div>
+    <div id="error-box"></div>
+  </div>
+
+  <!-- Right: results -->
+  <div class="panel" id="results-panel">
+    <div class="empty-state" id="empty-state">
+      Results will appear here after running the prediction.<br>
+      <span style="font-size:0.82rem;">Pipeline takes ~1&#8211;2 min (Auto3D + AIMNet2 optimization)</span>
+    </div>
+    <div id="results-container"></div>
+  </div>
+
+</div>
+
+<script src="https://3dmol.csb.pitt.edu/build/3Dmol-min.js"></script>
+<script>
+  let pollTimer = null;
+
+  async function getFromKetcher() {
+    try {
+      const frame = document.getElementById('ketcher-frame');
+      const ketcher = frame.contentWindow.ketcher;
+      if (!ketcher) {
+        showError('Ketcher is not loaded. Extract the standalone release into static/ketcher/ and restart the server.');
+        return;
+      }
+      const smiles = await ketcher.getSmiles();
+      if (smiles && smiles.trim()) {
+        document.getElementById('smiles-input').value = smiles.trim();
+      }
+    } catch (e) {
+      showError('Could not read from Ketcher: ' + e.message);
+    }
+  }
+
+  async function runPrediction() {
+    const smiles = document.getElementById('smiles-input').value.trim();
+    if (!smiles) {
+      showError('Enter a SMILES string or draw a structure in Ketcher first.');
+      return;
+    }
+
+    document.getElementById('results-container').innerHTML = '';
+    document.getElementById('empty-state').style.display = 'block';
+    document.getElementById('error-box').innerHTML = '';
+    document.getElementById('run-btn').disabled = true;
+    clearInterval(pollTimer);
+
+    setStatus('<span class="spinner"></span>Submitting&hellip;');
+
+    try {
+      const resp = await fetch('/submit', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({smiles})
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+
+      setStatus('<span class="spinner"></span>Running pipeline &mdash; Auto3D conformer search + AIMNet2 optimization&hellip;');
+      const jobId = data.job_id;
+      pollTimer = setInterval(() => pollStatus(jobId), 5000);
+    } catch (e) {
+      showError(e.message);
+      setStatus('');
+      document.getElementById('run-btn').disabled = false;
+    }
+  }
+
+  async function pollStatus(jobId) {
+    try {
+      const resp = await fetch('/status/' + jobId);
+      const job  = await resp.json();
+      if (job.status === 'done') {
+        clearInterval(pollTimer);
+        setStatus('');
+        document.getElementById('run-btn').disabled = false;
+        renderResults(job.result.conformers);
+      } else if (job.status === 'error') {
+        clearInterval(pollTimer);
+        showError(job.error || 'Pipeline error');
+        setStatus('');
+        document.getElementById('run-btn').disabled = false;
+      }
+      // 'running' — keep polling
+    } catch (_) { /* network hiccup — keep polling */ }
+  }
+
+  function renderResults(conformers) {
+    document.getElementById('empty-state').style.display = 'none';
+    const container = document.getElementById('results-container');
+    container.innerHTML = '';
+
+    conformers.forEach((c, i) => {
+      const badgeClass = c.classical_pred === 'R' ? 'badge-R'
+                       : c.classical_pred === 'F' ? 'badge-F'
+                       : 'badge-inspect';
+      const predLabel  = c.classical_pred === 'R' ? 'Rearrangement'
+                       : c.classical_pred === 'F' ? 'Fragmentation'
+                       : 'Inspect';
+      const energy  = c.energy_kcal != null ? c.energy_kcal.toFixed(1) + ' kcal/mol (AIMNet2)' : '';
+      const d_aryl  = c.d_aryl  != null ? c.d_aryl.toFixed(1)  + '&deg;' : 'n/a';
+      const d_allyl = c.d_allyl != null ? c.d_allyl.toFixed(1) + '&deg;' : 'n/a';
+
+      const viewerId = 'viewer-' + i;
+      const card = document.createElement('div');
+      card.className = 'conformer-card';
+      card.innerHTML = `
+        <div class="card-header">
+          <span class="card-name">${c.name}</span>
+          <span class="card-energy">${energy}</span>
+          <span class="badge ${badgeClass}">${predLabel}</span>
+        </div>
+        <div class="dihedrals">O&ndash;N&ndash;C(aryl) = ${d_aryl} &nbsp;|&nbsp; O&ndash;N&ndash;C(allyl) = ${d_allyl}</div>
+        <div class="viewer-div" id="${viewerId}"></div>
+      `;
+      container.appendChild(card);
+
+      // Initialize 3DMol.js viewer after DOM is updated
+      requestAnimationFrame(() => {
+        const div = document.getElementById(viewerId);
+        const viewer = $3Dmol.createViewer(div, {backgroundColor: '#fafafa'});
+        viewer.addModel(c.sdf_block, 'sdf');
+        viewer.setStyle({}, {stick: {radius: 0.12}, sphere: {scale: 0.24}});
+        viewer.zoomTo();
+        viewer.render();
+      });
+    });
+  }
+
+  function setStatus(html) { document.getElementById('status-line').innerHTML = html; }
+  function showError(msg)  { document.getElementById('error-box').innerHTML = '<div class="error-msg">&#9888; ' + msg + '</div>'; }
+</script>
+
+</body>
+</html>
