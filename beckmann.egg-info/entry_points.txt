@@ -1,0 +1,4 @@
+[console_scripts]
+beckmann-conformers = beckmann.conformers:main
+beckmann-optimize = beckmann.optimize:main
+beckmann-oximes = beckmann.oximes:main
