@@ -154,22 +154,50 @@
     .conformer-card {
       border: 1px solid #e0e4eb;
       border-radius: 7px;
-      padding: 16px;
+      overflow: hidden;
       margin-bottom: 16px;
     }
 
-    .card-header {
+    .pred-banner {
+      padding: 12px 16px;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 14px;
+    }
+    .pred-banner-R       { background: #1a7a34; }
+    .pred-banner-F       { background: #b91c1c; }
+    .pred-banner-inspect { background: #6b7280; }
+
+    .pred-label {
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: white;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .pred-sublabel {
+      font-size: 0.78rem;
+      color: rgba(255,255,255,0.8);
+    }
+
+    .card-body {
+      padding: 12px 16px 16px;
+    }
+
+    .card-meta {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
       margin-bottom: 8px;
       flex-wrap: wrap;
     }
 
     .card-name {
       font-weight: 700;
-      font-size: 1rem;
+      font-size: 0.95rem;
       font-family: 'Courier New', monospace;
+      color: #334;
     }
 
     .card-energy {
@@ -177,22 +205,19 @@
       color: #667;
     }
 
-    .badge {
-      padding: 3px 10px;
-      border-radius: 12px;
-      font-size: 0.78rem;
-      font-weight: 700;
-      letter-spacing: 0.03em;
-    }
-    .badge-R       { background: #d4edda; color: #145a24; }
-    .badge-F       { background: #f8d7da; color: #7a1c24; }
-    .badge-inspect { background: #e9ecef; color: #495057; }
-
     .dihedrals {
-      font-size: 0.8rem;
+      font-size: 0.82rem;
       color: #778;
       font-family: 'Courier New', monospace;
       margin-bottom: 12px;
+      background: #f7f8fa;
+      border-radius: 4px;
+      padding: 6px 10px;
+    }
+
+    .dihedral-anti {
+      color: #1a7a34;
+      font-weight: 700;
     }
 
     .viewer-div {
@@ -325,27 +350,42 @@
     container.innerHTML = '';
 
     conformers.forEach((c, i) => {
-      const badgeClass = c.classical_pred === 'R' ? 'badge-R'
-                       : c.classical_pred === 'F' ? 'badge-F'
-                       : 'badge-inspect';
-      const predLabel  = c.classical_pred === 'R' ? 'Rearrangement'
-                       : c.classical_pred === 'F' ? 'Fragmentation'
-                       : 'Inspect';
+      const pred       = c.classical_pred;
+      const bannerCls  = pred === 'R' ? 'pred-banner-R' : pred === 'F' ? 'pred-banner-F' : 'pred-banner-inspect';
+      const predLabel  = pred === 'R' ? 'Rearrangement' : pred === 'F' ? 'Fragmentation' : 'Inspect';
+      const predSub    = pred === 'R' ? 'aryl group migrates (anti-periplanar)'
+                       : pred === 'F' ? 'C–C bond cleaves (anti-periplanar)'
+                       : 'neither group is anti-periplanar';
       const energy  = c.energy_kcal != null ? c.energy_kcal.toFixed(1) + ' kcal/mol (AIMNet2)' : '';
-      const d_aryl  = c.d_aryl  != null ? c.d_aryl.toFixed(1)  + '&deg;' : 'n/a';
-      const d_allyl = c.d_allyl != null ? c.d_allyl.toFixed(1) + '&deg;' : 'n/a';
+
+      const ANTI = 150;
+      const fmtD = (val) => val != null ? val.toFixed(1) + '&deg;' : 'n/a';
+      const clsAryl  = (c.d_aryl  != null && c.d_aryl  >= ANTI) ? 'dihedral-anti' : '';
+      const clsAllyl = (c.d_allyl != null && c.d_allyl >= ANTI) ? 'dihedral-anti' : '';
 
       const viewerId = 'viewer-' + i;
       const card = document.createElement('div');
       card.className = 'conformer-card';
       card.innerHTML = `
-        <div class="card-header">
-          <span class="card-name">${c.name}</span>
-          <span class="card-energy">${energy}</span>
-          <span class="badge ${badgeClass}">${predLabel}</span>
+        <div class="pred-banner ${bannerCls}">
+          <div>
+            <div class="pred-label">${predLabel}</div>
+            <div class="pred-sublabel">${predSub}</div>
+          </div>
         </div>
-        <div class="dihedrals">O&ndash;N&ndash;C(aryl) = ${d_aryl} &nbsp;|&nbsp; O&ndash;N&ndash;C(allyl) = ${d_allyl}</div>
-        <div class="viewer-div" id="${viewerId}"></div>
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="card-name">${c.name}</span>
+            <span class="card-energy">${energy}</span>
+          </div>
+          <div class="dihedrals">
+            O&ndash;N&ndash;C(aryl)&nbsp;&nbsp;= <span class="${clsAryl}">${fmtD(c.d_aryl)}</span>
+            &emsp;|&emsp;
+            O&ndash;N&ndash;C(allyl) = <span class="${clsAllyl}">${fmtD(c.d_allyl)}</span>
+            &emsp;<span style="color:#aaa;font-size:0.75rem;">(anti &ge; 150&deg; shown in green)</span>
+          </div>
+          <div class="viewer-div" id="${viewerId}"></div>
+        </div>
       `;
       container.appendChild(card);
 
