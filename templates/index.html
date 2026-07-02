@@ -358,7 +358,7 @@
       const data = await resp.json();
       if (data.error) throw new Error(data.error);
 
-      setStatus('<span class="spinner"></span>Running pipeline &mdash; Auto3D conformer search + AIMNet2 optimization&hellip;');
+      setStatus('<span class="spinner"></span>Running pipeline; Auto3D conformer search + AIMNet2 optimization&hellip;');
       const jobId = data.job_id;
       pollTimer = setInterval(() => pollStatus(jobId), 5000);
     } catch (e) {
@@ -401,10 +401,10 @@
     const verdictTitleCls = pred === 'R' ? 'verdict-title-R' : pred === 'F' ? 'verdict-title-F' : 'verdict-title-inspect';
     const verdictIcon  = pred === 'R' ? '&#x2192;' : pred === 'F' ? '&#x2702;' : '&#x3f;';
     const verdictSub   = pred === 'R'
-      ? `Aryl group predicted to migrate &mdash; lowest-energy isomer (${best.name}), O&ndash;N&ndash;C(aryl) = ${best.d_aryl != null ? best.d_aryl.toFixed(1) + '&deg;' : 'n/a'}`
+      ? `Aryl group predicted to migrate ; lowest-energy isomer (${best.name}), O&ndash;N&ndash;C(aryl) = ${best.d_aryl != null ? best.d_aryl.toFixed(1) + '&deg;' : 'n/a'}`
       : pred === 'F'
-      ? `C&ndash;C bond cleavage predicted &mdash; lowest-energy isomer (${best.name}), O&ndash;N&ndash;C(allyl) = ${best.d_allyl != null ? best.d_allyl.toFixed(1) + '&deg;' : 'n/a'}`
-      : `Neither group is anti-periplanar (&ge;150&deg;) &mdash; geometry does not predict a clear outcome`;
+      ? `C&ndash;C bond cleavage predicted ; lowest-energy isomer (${best.name}), O&ndash;N&ndash;C(allyl) = ${best.d_allyl != null ? best.d_allyl.toFixed(1) + '&deg;' : 'n/a'}`
+      : `Neither group is anti-periplanar (&ge;150&deg;) ; geometry does not predict a clear outcome`;
 
     const verdictEl = document.createElement('div');
     verdictEl.className = 'verdict-box ' + verdictCls;
