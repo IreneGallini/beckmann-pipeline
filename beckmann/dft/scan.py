@@ -2,12 +2,13 @@
 Extract converged intermediate geometries from a Gaussian scan log and write
 single-point NBO input files for the missing scan points.
 
-For mol_002_E, the scan ran NBO only at R0 and R0+0.4 Å.  This module
-extracts the converged geometries at R0+0.1, R0+0.2, R0+0.3 and creates
-three single-point .gjf files for upload to Citadel.
+The scan (Stage 3) only runs NBO at R0 and R0+0.4 Å.  This module extracts the
+converged geometries at R0+0.1, R0+0.2, R0+0.3 and creates three single-point
+.gjf files for upload to Citadel.
 
-Output: data/output/dft_opt/mol_002_E/{name}_sp{N}.gjf  (N = 2, 3, 4)
+Output: data/output/dft_opt/{mol}/{mol}_sp{N}.gjf  (N = 2, 3, 4)
 """
+import argparse
 import math
 import re
 from pathlib import Path
@@ -17,6 +18,9 @@ from beckmann.config import (
     FUNCTIONAL, BASIS, NPROC, MEM_GB, CHARGE, MULTIPLICITY,
     NBO_KEYWORDS_EQ,
 )
+from beckmann.dft.inputs import TEST_IDS
+
+OXIME_LABEL_RE = re.compile(r"\[oxime:\s*C(\d+)=N(\d+)-O(\d+)\]")
 
 ATOMIC_SYMBOLS = {
     1: "H",  6: "C",  7: "N",  8: "O",  9: "F",
@@ -126,28 +130,71 @@ def extract_scan_sp(
     return written
 
 
-def main() -> None:
-    mol      = "mol_002_E"
+def oxime_indices_from_gjf(gjf_path: Path) -> tuple[int, int, str]:
+    """Parse '[oxime: C{ci}=N{ni}-O{oi}]' out of a .gjf title line."""
+    match = OXIME_LABEL_RE.search(gjf_path.read_text())
+    if not match:
+        raise ValueError(f"{gjf_path}: no '[oxime: C#=N#-O#]' label found")
+    ci, ni, oi = match.groups()
+    return int(ni), int(oi), f"[oxime: C{ci}=N{ni}-O{oi}]"
+
+
+def process_molecule(mol: str) -> list[Path]:
+    """Run extract_scan_sp() for one test-set molecule, e.g. 'mol_002_E'."""
     mol_dir  = DATA_OUTPUT / "dft_opt" / mol
     log_path = mol_dir / f"{mol}_scan.log"
-
-    NI, OI      = 12, 13
-    oxime_label = "[oxime: C11=N12-O13]"
+    ni, oi, oxime_label = oxime_indices_from_gjf(mol_dir / f"{mol}_opt.gjf")
 
     written = extract_scan_sp(
         log_path    = log_path,
         out_dir     = mol_dir,
-        ni          = NI,
-        oi          = OI,
+        ni          = ni,
+        oi          = oi,
         oxime_label = oxime_label,
         mol_name    = mol,
     )
 
     print(f"\n{len(written)} files written to {mol_dir}")
-    print("\nUpload and submit on Citadel:")
-    print("  python scripts/dft/hpc_sync.py --mol 002 upload")
-    sp_names = " ".join(f.name for f in written)
-    print(f"  # then submit: {sp_names}")
+    if written:
+        mol_id = mol.split("_")[1]
+        print("\nUpload and submit on Citadel:")
+        print(f"  python scripts/dft/hpc_sync.py --mol {mol_id} upload")
+        sp_names = " ".join(f.name for f in written)
+        print(f"  # then submit: {sp_names}")
+    return written
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--mol", metavar="ID",
+        help="Test-set molecule ID (e.g. 002). Default: all molecules in "
+             "TEST_IDS with a completed _scan.log but no _sp2.gjf yet.",
+    )
+    args = parser.parse_args()
+
+    if args.mol:
+        mol_ids = [args.mol]
+    else:
+        mol_ids = sorted(TEST_IDS)
+
+    for mol_id in mol_ids:
+        mol_dir = DATA_OUTPUT / "dft_opt" / f"mol_{mol_id.zfill(3)}_E"
+        if not mol_dir.exists():
+            print(f"-- mol_{mol_id.zfill(3)}_E: no directory, skipping")
+            continue
+        mol = mol_dir.name
+        scan_log = mol_dir / f"{mol}_scan.log"
+        sp2_gjf  = mol_dir / f"{mol}_sp2.gjf"
+        if not scan_log.exists():
+            print(f"-- {mol}: no _scan.log yet, skipping")
+            continue
+        if sp2_gjf.exists() and not args.mol:
+            print(f"-- {mol}: _sp2.gjf already exists, skipping (pass --mol to force)")
+            continue
+
+        print(f"\n== {mol} ==")
+        process_molecule(mol)
 
 
 if __name__ == "__main__":
