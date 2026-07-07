@@ -132,11 +132,17 @@ def extract_scan_sp(
 
 def oxime_indices_from_gjf(gjf_path: Path) -> tuple[int, int, str]:
     """Parse '[oxime: C{ci}=N{ni}-O{oi}]' out of a .gjf title line."""
+    ci, ni, oi, _ = oxime_atom_map_from_gjf(gjf_path)
+    return ni, oi, f"[oxime: C{ci}=N{ni}-O{oi}]"
+
+
+def oxime_atom_map_from_gjf(gjf_path: Path) -> tuple[int, int, int, str]:
+    """Parse '[oxime: C{ci}=N{ni}-O{oi}]' out of a .gjf title line, including ci."""
     match = OXIME_LABEL_RE.search(gjf_path.read_text())
     if not match:
         raise ValueError(f"{gjf_path}: no '[oxime: C#=N#-O#]' label found")
-    ci, ni, oi = match.groups()
-    return int(ni), int(oi), f"[oxime: C{ci}=N{ni}-O{oi}]"
+    ci, ni, oi = (int(g) for g in match.groups())
+    return ci, ni, oi, f"[oxime: C{ci}=N{ni}-O{oi}]"
 
 
 def process_molecule(mol: str) -> list[Path]:
