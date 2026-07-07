@@ -15,7 +15,7 @@ from rdkit import Chem
 from beckmann.config import (
     DATA_OUTPUT,
     FUNCTIONAL, BASIS, NPROC, MEM_GB, CHARGE, MULTIPLICITY,
-    NBO_KEYWORDS_EQ, NBO_KEYWORDS_SCAN, NBO_KEYWORDS_SP,
+    NBO_KEYWORDS,
 )
 
 TEST_IDS  = {"002", "006", "020", "021"}
@@ -44,35 +44,37 @@ def _opt_gjf(name: str, coords: list[tuple], oxime_label: str) -> str:
 
 
 def _nbo_gjf(name: str, oxime_label: str) -> str:
-    """Stage 2: NBO single-point at DFT geometry.
+    """Stage 2: NBO7 single-point at DFT geometry.
 
-    ARCHIVE FILE={name} writes a .47 density archive for downstream gennbo7
-    (CMO-based descriptors Lambda and wCNmax).
+    pop=nbo7read (not nboread) routes through Gaussian's external-program
+    interface (Link 612 -> gaunbo7 -> g16nbo -> nbo7), which is required for
+    CMO-based descriptors (Lambda, wCNmax) -- the bundled NBO 3.1 (pop=nboread)
+    doesn't support CMO at all.
     """
     return (
         f"%chk={name}_nbo.chk\n"
         f"%oldchk={name}_opt.chk\n"
         f"%nprocshared={NPROC}\n"
         f"%mem={MEM_GB}GB\n"
-        f"#p {FUNCTIONAL}/{BASIS} sp pop=nboread geom=checkpoint guess=read\n"
+        f"#p {FUNCTIONAL}/{BASIS} sp pop=nbo7read geom=checkpoint guess=read\n"
         f"\n"
         f"{name} NBO  {oxime_label}\n"
         f"\n"
         f"{CHARGE} {MULTIPLICITY}\n"
         f"\n"
-        f"$NBO {NBO_KEYWORDS_EQ} ARCHIVE FILE={name} $END\n"
+        f"$NBO {NBO_KEYWORDS} $END\n"
         f"\n\n"
     )
 
 
 def _scan_gjf(name: str, ni: int, oi: int, oxime_label: str) -> str:
-    """Stage 3: relaxed N-O bond scan — 5 points (R to R+0.4 Å), NBO at each."""
+    """Stage 3: relaxed N-O bond scan — 5 points (R to R+0.4 Å), NBO7 at each."""
     return (
         f"%chk={name}_scan.chk\n"
         f"%oldchk={name}_opt.chk\n"
         f"%nprocshared={NPROC}\n"
         f"%mem={MEM_GB}GB\n"
-        f"#p {FUNCTIONAL}/{BASIS} opt=(ModRedundant,MaxCycles=200) pop=nboread geom=checkpoint guess=read\n"
+        f"#p {FUNCTIONAL}/{BASIS} opt=(ModRedundant,MaxCycles=200) pop=nbo7read geom=checkpoint guess=read\n"
         f"\n"
         f"{name} scan  {oxime_label}\n"
         f"\n"
@@ -80,7 +82,7 @@ def _scan_gjf(name: str, ni: int, oi: int, oxime_label: str) -> str:
         f"\n"
         f"B {ni} {oi} S 4 0.1\n"
         f"\n"
-        f"$NBO {NBO_KEYWORDS_SCAN} $END\n"
+        f"$NBO {NBO_KEYWORDS} $END\n"
         f"\n\n"
     )
 
@@ -145,12 +147,12 @@ def main_opt() -> None:
 # ── single-point NBO workflow ──────────────────────────────────────────────────
 
 def _sp_gjf(name: str, coords: list[tuple], oxime_label: str) -> str:
-    """Single-point NBO directly on AIMNet2 geometry."""
+    """Single-point NBO7 directly on AIMNet2 geometry."""
     header = (
         f"%chk={name}.chk\n"
         f"%nprocshared={NPROC}\n"
         f"%mem={MEM_GB}GB\n"
-        f"#p {FUNCTIONAL}/{BASIS} sp pop=nboread\n"
+        f"#p {FUNCTIONAL}/{BASIS} sp pop=nbo7read\n"
         f"\n"
         f"{name}  {oxime_label}\n"
         f"\n"
@@ -160,7 +162,7 @@ def _sp_gjf(name: str, coords: list[tuple], oxime_label: str) -> str:
         f"{sym:<3}  {x:>14.8f}  {y:>14.8f}  {z:>14.8f}"
         for sym, x, y, z in coords
     )
-    return header + coord_block + f"\n$NBO {NBO_KEYWORDS_SP} $END\n\n\n"
+    return header + coord_block + f"\n$NBO {NBO_KEYWORDS} $END\n\n\n"
 
 
 def prepare_sp(sdf_path: Path, outdir: Path) -> None:

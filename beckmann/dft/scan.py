@@ -16,7 +16,7 @@ from pathlib import Path
 from beckmann.config import (
     DATA_OUTPUT,
     FUNCTIONAL, BASIS, NPROC, MEM_GB, CHARGE, MULTIPLICITY,
-    NBO_KEYWORDS_EQ,
+    NBO_KEYWORDS,
 )
 from beckmann.dft.inputs import TEST_IDS
 
@@ -59,7 +59,7 @@ def no_distance(atoms: list, i: int, j: int) -> float:
 
 
 def gjf_sp(job_name: str, atoms: list, oxime_label: str, r_no: float) -> str:
-    """Generate a single-point NBO .gjf for one intermediate scan geometry."""
+    """Generate a single-point NBO7 .gjf for one intermediate scan geometry."""
     coord_block = "\n".join(
         f"{sym:<3}  {x:>14.8f}  {y:>14.8f}  {z:>14.8f}"
         for sym, x, y, z in atoms
@@ -70,14 +70,14 @@ def gjf_sp(job_name: str, atoms: list, oxime_label: str, r_no: float) -> str:
         f"%chk={job_name}.chk\n"
         f"%nprocshared={NPROC}\n"
         f"%mem={MEM_GB}GB\n"
-        f"#p {FUNCTIONAL}/{BASIS} sp pop=nboread\n"
+        f"#p {FUNCTIONAL}/{BASIS} sp pop=nbo7read\n"
         f"\n"
         f"{job_name}  R(N-O)={r_no:.4f}A  {oxime_label}\n"
         f"\n"
         f"{CHARGE} {MULTIPLICITY}\n"
         f"{coord_block}\n"
         f"\n"
-        f"$NBO {NBO_KEYWORDS_EQ} $END\n"
+        f"$NBO {NBO_KEYWORDS} $END\n"
         f"\n\n"
     )
 

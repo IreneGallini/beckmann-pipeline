@@ -12,7 +12,8 @@ NPROC        = 8
 MEM_GB       = 16
 CHARGE       = 1        # protonated activated oxime (C=N-[OH2+])
 MULTIPLICITY = 1
-NBO_KEYWORDS_EQ   = "E2PERT BNDIDX NBOSUM"   # equilibrium NBO via NBO 3.1 bundled in g16
-NBO_KEYWORDS_SCAN = "E2PERT BNDIDX NBOSUM"   # scan NBO via NBO 3.1
-# CMO is NBO7-only; obtained post-hoc via gennbo on the .47 archive from _nbo.gjf
-NBO_KEYWORDS_SP   = "E2PERT BNDIDX NBOSUM CMO"  # single-point (requires NBO7)
+# CMO (Lambda, wCNmax) requires NBO7 -- every stage below must use
+# pop=nbo7read (not pop=nboread) in its route line, which routes through
+# Gaussian's external-program interface (gaunbo7 -> g16nbo -> nbo7.i8.exe)
+# instead of the bundled NBO 3.1, which doesn't support CMO at all.
+NBO_KEYWORDS = "E2PERT BNDIDX NBOSUM CMO"

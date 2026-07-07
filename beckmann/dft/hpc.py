@@ -40,7 +40,7 @@ def load_config() -> dict:
                 continue
             key, _, value = line.partition("=")
             config[key.strip()] = value.strip()
-    for key in ("HPC_HOST", "HPC_REMOTE_DIR", "G16_PATH", "NBOEXE"):
+    for key in ("HPC_HOST", "HPC_REMOTE_DIR", "G16_PATH", "NBOEXE", "NBO_WRAPPER_DIR"):
         if key in os.environ:
             config[key] = os.environ[key]
     return config
@@ -58,6 +58,14 @@ def require_config(config: dict) -> None:
     if not config.get("NBOEXE"):
         print("WARNING: NBOEXE not set — Gaussian will use bundled NBO 3.1 (no CMO support).", file=sys.stderr)
         print("         Set NBOEXE=/opt/nbo7/bin/nbo7.i8.exe in .env to use NBO7.", file=sys.stderr)
+    if config.get("NBOEXE") and not config.get("NBO_WRAPPER_DIR"):
+        print("WARNING: NBO_WRAPPER_DIR not set — pop=nbo7read needs the gaunbo7 script",
+              file=sys.stderr)
+        print("         on PATH with execute permission (it ships read-only under NBOEXE's",
+              file=sys.stderr)
+        print("         directory). Copy it somewhere you own and chmod +x, then set",
+              file=sys.stderr)
+        print("         NBO_WRAPPER_DIR=~/beckmann/nbo7_bin in .env.", file=sys.stderr)
 
 
 def _gauss_exports(config: dict) -> str:
@@ -70,6 +78,11 @@ def _gauss_exports(config: dict) -> str:
         nbo_bin = str(Path(config["NBOEXE"]).parent)
         exports += f' && export GAUSS_EXEDIR={nbo_bin}:{gauss_exedir}'
         exports += f' && export PATH={nbo_bin}:$PATH'
+    if config.get("NBO_WRAPPER_DIR"):
+        # gaunbo7/gaunbo6 under NBOEXE's directory are read-only (root-owned);
+        # pop=nbo7read finds the executable copies here via a plain PATH search
+        # (Gaussian's Link 612 external-program interface, not GAUSS_EXEDIR).
+        exports += f' && export PATH={config["NBO_WRAPPER_DIR"]}:$PATH'
     return exports
 
 
