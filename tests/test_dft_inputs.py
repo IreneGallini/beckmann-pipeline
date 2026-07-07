@@ -135,7 +135,9 @@ def test_nbo_gjf_nbo_block(dft_opt_dir):
     for gjf in dft_opt_dir.glob("**/*_nbo.gjf"):
         text = gjf.read_text()
         assert "$NBO" in text and "$END" in text, f"{gjf.name}: missing $NBO...$END block"
-        assert "E2PERT" in text, f"{gjf.name}: missing E2PERT keyword"
+        assert "E2PERT" in text,      f"{gjf.name}: missing E2PERT keyword"
+        assert "CMO" in text,         f"{gjf.name}: missing CMO keyword (needs NBO7)"
+        assert "pop=nbo7read" in text, f"{gjf.name}: missing 'pop=nbo7read'"
 
 
 def test_nbo_gjf_charge(dft_opt_dir):

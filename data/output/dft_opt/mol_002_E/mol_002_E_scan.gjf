@@ -2,7 +2,7 @@
 %oldchk=mol_002_E_opt.chk
 %nprocshared=8
 %mem=16GB
-#p wB97XD/6-311+G(d,p) opt=(ModRedundant,MaxCycles=200) pop=nboread geom=checkpoint guess=read
+#p wB97XD/6-311+G(d,p) opt=(ModRedundant,MaxCycles=200) pop=nbo7read geom=checkpoint guess=read
 
 mol_002_E scan  [oxime: C11=N12-O13]
 
@@ -10,6 +10,6 @@ mol_002_E scan  [oxime: C11=N12-O13]
 
 B 12 13 S 4 0.1
 
-$NBO E2PERT BNDIDX NBOSUM $END
+$NBO E2PERT BNDIDX NBOSUM CMO $END
 
 

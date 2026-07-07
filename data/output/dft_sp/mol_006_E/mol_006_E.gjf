@@ -1,7 +1,7 @@
 %chk=mol_006_E.chk
 %nprocshared=8
 %mem=16GB
-#p wB97XD/6-311+G(d,p) sp pop=nboread
+#p wB97XD/6-311+G(d,p) sp pop=nbo7read
 
 mol_006_E  [oxime: C10=N11-O12]
 
@@ -30,6 +30,6 @@ H       -2.81420000     -1.46790000      0.31450000
 H       -2.86910000     -0.77160000     -1.28870000
 H       -4.35580000      1.08760000      1.37410000
 H       -4.40150000      1.70470000     -0.07120000
-$NBO E2PERT BNDIDX NBOSUM $END
+$NBO E2PERT BNDIDX NBOSUM CMO $END
 
 
