@@ -100,11 +100,11 @@ Output: `data/output/analysis/classical_rule_results.csv`
 |---|---|---|
 | `{name}_opt.gjf` | yes | Gaussian input — Stage 1 geometry optimisation (`wB97XD/6-311+G(d,p) opt`). Starting geometry from AIMNet2. |
 | `{name}_opt.log` | no | Gaussian output — Stage 1. Must end with "Normal termination". |
-| `{name}_nbo.gjf` | yes | Gaussian input — Stage 2 NBO single-point (`sp pop=nboread geom=checkpoint`). Reads `_opt.chk`. Also writes `.47` archive for downstream `gennbo.i8.exe` (CMO analysis). |
-| `{name}_nbo.log` | no | Gaussian output — Stage 2. NBO analysis at equilibrium geometry: E2PERT, BNDIDX, NBOSUM. |
-| `{name}_scan.gjf` | yes | Gaussian input — Stage 3 relaxed N-O bond scan (`opt=(ModRedundant)`, 5 points R to R+0.4 Å, NBO at each). |
-| `{name}_scan.log` | no | Gaussian output — Stage 3. E2PERT at each scan point; primary source for Ψ and d/dR. |
-| `{name}_sp{2,3,4}.gjf` | yes | Single-point NBO at intermediate scan geometries (R0+0.1, +0.2, +0.3 Å), extracted by `beckmann.dft.scan`. |
+| `{name}_nbo.gjf` | yes | Gaussian input — Stage 2 NBO7 single-point (`sp pop=nbo7read geom=checkpoint`). Reads `_opt.chk`. CMO (Λ, wCNmax) comes directly from this log — no separate post-processing step. |
+| `{name}_nbo.log` | no | Gaussian output — Stage 2. NBO7 analysis at equilibrium geometry: E2PERT, BNDIDX, NBOSUM, CMO. |
+| `{name}_scan.gjf` | yes | Gaussian input — Stage 3 relaxed N-O bond scan (`opt=(ModRedundant)`, `pop=nbo7read`, 5 points R to R+0.4 Å, NBO7 at each). |
+| `{name}_scan.log` | no | Gaussian output — Stage 3. E2PERT + CMO at each scan point; primary source for Ψ, Λ, wCNmax, and d/dR. |
+| `{name}_sp{2,3,4}.gjf` | yes | Single-point NBO7 (`pop=nbo7read`) at intermediate scan geometries (R0+0.1, +0.2, +0.3 Å), extracted by `beckmann.dft.scan`. |
 
 Files that stay on the cluster only:
 
@@ -117,17 +117,17 @@ Files that stay on the cluster only:
 
 | File | In git | What it is |
 |---|---|---|
-| `{name}.gjf` | yes | Gaussian input — single-point NBO directly on AIMNet2 geometry. No DFT re-optimisation. |
-| `{name}.log` | no | Gaussian output with NBO analysis. |
+| `{name}.gjf` | yes | Gaussian input — single-point NBO7 (`pop=nbo7read`) directly on AIMNet2 geometry. No DFT re-optimisation. |
+| `{name}.log` | no | Gaussian output with NBO7 analysis, including CMO. |
 
-**Reading NBO output:** atom indices in the NBO log match the `[oxime: C{ci}=N{ni}-O{oi}]` label in each `.gjf` title line. Search the `_nbo.log` for `E2PERT` to find donor→acceptor interactions; `BD* N–O` entries show which σ bonds donate into the N–O antibond.
+**Reading NBO output:** atom indices in the NBO log match the `[oxime: C{ci}=N{ni}-O{oi}]` label in each `.gjf` title line. Search the `_nbo.log` for `E2PERT` to find donor→acceptor interactions; `BD* N–O` entries show which σ bonds donate into the N–O antibond. Search for `CMO: NBO Analysis of Canonical Molecular Orbitals` for the canonical-MO table used to compute Λ and wCNmax. Confirm NBO7 actually ran by checking for the `NBO 7.0` banner — if the log says `Gaussian NBO Version 3.1` instead, `pop=nbo7read` didn't take effect and CMO will be silently missing (see "NBO7 setup" below).
 
 ## HPC submission (Citadel)
 
 Citadel (`citadel.chem.cmu.edu`) is a shared compute server — no SLURM. Jobs run directly via `g16`. Use `scripts/dft/hpc_sync.py`:
 
 ```bash
-cp .env.example .env   # fill in HPC_HOST, HPC_REMOTE_DIR, G16_PATH
+cp .env.example .env   # fill in HPC_HOST, HPC_REMOTE_DIR, G16_PATH, NBOEXE, NBO_WRAPPER_DIR
 
 # Two-stage workflow (mol 002 as example)
 python scripts/dft/hpc_sync.py --mol 002 upload
@@ -138,6 +138,20 @@ python scripts/dft/hpc_sync.py --mol 002 download
 ```
 
 SSH key auth must be set up (`ssh-copy-id igallini@citadel.chem.cmu.edu`) so commands run without password prompts.
+
+### NBO7 setup
+
+CMO descriptors (Λ, wCNmax) require Gaussian to route through NBO7, not the NBO 3.1 bundled inside g16 — these are separate code paths, selected by `pop=nbo7read` vs. `pop=nboread` in the route line. All `.gjf` generators in this repo already use `pop=nbo7read`.
+
+For that to actually invoke NBO7, the vendor's `gaunbo7` script needs to be on `PATH` with execute permission. On Citadel it's installed read-only under `root` (`/opt/nbo7/bin/gaunbo7`), so a user-owned executable copy is required:
+
+```bash
+ssh igallini@citadel.chem.cmu.edu "mkdir -p ~/beckmann/nbo7_bin && \
+  cp /opt/nbo7/bin/gaunbo7 /opt/nbo7/bin/gaunbo6 ~/beckmann/nbo7_bin/ && \
+  chmod +x ~/beckmann/nbo7_bin/gaunbo7 ~/beckmann/nbo7_bin/gaunbo6"
+```
+
+Then set `NBO_WRAPPER_DIR=~/beckmann/nbo7_bin` in `.env` — `hpc_sync.py` prepends it to `PATH` before every job. Verify by checking a `.log` for the `NBO 7.0` banner and a `CMO: NBO Analysis of Canonical Molecular Orbitals` section.
 
 ## Tests
 
