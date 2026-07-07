@@ -18,13 +18,16 @@ from beckmann.config import DATA_OUTPUT
 from beckmann.dft.inputs import TEST_IDS
 from beckmann.dft.scan import no_distance, oxime_indices_from_gjf, parse_standard_orientations
 
-TABLE_HEADER = "Second Order Perturbation Theory Analysis"
+TABLE_HEADER = "second order perturbation theory analysis"
 STAGES       = ["nbo", "scan", "sp2", "sp3", "sp4"]
 
-ROW_RE = re.compile(
-    r"^\s*\d+\.\s+(?P<donor>.+?)\s*/\s*\d+\.\s+(?P<acceptor>.+?)\s+"
-    r"(?P<e2>-?\d+\.\d+)\s+(?P<de>-?\d+\.\d+)\s+(?P<f>-?\d+\.\d+)\s*$"
-)
+# NBO7 and NBO 3.1 print this table in different layouts: NBO 3.1 separates
+# donor/acceptor with ' / '; NBO7 just column-aligns them with no delimiter
+# (e.g. '14. LP ( 1) O  2            49. BD*( 1) C  1- H 14      3.47 ...').
+# Locate the two '<int>.' index markers positionally instead of relying on a
+# fixed separator -- works for both formats.
+IDX_RE    = re.compile(r"(\d+)\.\s+")
+FLOATS_RE = re.compile(r"(-?\d+\.\d+)\s+(-?\d+\.\d+)\s+(-?\d+\.\d+)\s*$")
 
 FIELDS = ["mol", "stage", "r_no", "donor", "acceptor", "e2_kcal", "de_au", "f_au"]
 
@@ -33,12 +36,31 @@ def find_table_starts(lines: list[str]) -> list[int]:
     """Line indices of the '===...===' separator that opens each E2PERT table."""
     starts = []
     for i, line in enumerate(lines):
-        if TABLE_HEADER in line:
+        if TABLE_HEADER in line.lower():
             j = i
             while j < len(lines) and not re.match(r"^\s*=+\s*$", lines[j]):
                 j += 1
             starts.append(j + 1)
     return starts
+
+
+def parse_e2pert_line(line: str) -> dict | None:
+    """Parse one donor/acceptor row, tolerant of both NBO 3.1 and NBO7 layouts."""
+    fm = FLOATS_RE.search(line)
+    if not fm:
+        return None
+    idxs = list(IDX_RE.finditer(line[:fm.start()]))
+    if len(idxs) != 2:
+        return None
+    donor    = line[idxs[0].end():idxs[1].start()].strip(" /")
+    acceptor = line[idxs[1].end():fm.start()].strip(" /")
+    return {
+        "donor":    " ".join(donor.split()),
+        "acceptor": " ".join(acceptor.split()),
+        "e2_kcal":  float(fm.group(1)),
+        "de_au":    float(fm.group(2)),
+        "f_au":     float(fm.group(3)),
+    }
 
 
 def parse_table_rows(lines: list[str], start: int) -> list[dict]:
@@ -50,16 +72,10 @@ def parse_table_rows(lines: list[str], start: int) -> list[dict]:
         if line.strip() == "" or line.strip().lower().startswith("within unit"):
             j += 1
             continue
-        match = ROW_RE.match(line)
-        if not match:
+        row = parse_e2pert_line(line)
+        if row is None:
             break
-        rows.append({
-            "donor":    " ".join(match.group("donor").split()),
-            "acceptor": " ".join(match.group("acceptor").split()),
-            "e2_kcal":  float(match.group("e2")),
-            "de_au":    float(match.group("de")),
-            "f_au":     float(match.group("f")),
-        })
+        rows.append(row)
         j += 1
     return rows
 
