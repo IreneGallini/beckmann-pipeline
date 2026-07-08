@@ -120,7 +120,18 @@ Files that stay on the cluster only:
 | `{name}.gjf` | yes | Gaussian input — single-point NBO7 (`pop=nbo7read`) directly on AIMNet2 geometry. No DFT re-optimisation. |
 | `{name}.log` | no | Gaussian output with NBO7 analysis, including CMO. |
 
-**Reading NBO output:** atom indices in the NBO log match the `[oxime: C{ci}=N{ni}-O{oi}]` label in each `.gjf` title line. Search the `_nbo.log` for `E2PERT` to find donor→acceptor interactions; `BD* N–O` entries show which σ bonds donate into the N–O antibond. Search for `CMO: NBO Analysis of Canonical Molecular Orbitals` for the canonical-MO table used to compute Λ and wCNmax. Confirm NBO7 actually ran by checking for the `NBO 7.0` banner — if the log says `Gaussian NBO Version 3.1` instead, `pop=nbo7read` didn't take effect and CMO will be silently missing (see "NBO7 setup" below).
+**Reading NBO output:** atom indices in the NBO log match the `[oxime: C{ci}=N{ni}-O{oi}]` label in each `.gjf` title line. Search the `_nbo.log` for `E2PERT` to find donor→acceptor interactions; `BD* N–O` entries show which σ bonds donate into the N–O antibond. Search for `CMO: NBO Analysis of Canonical Molecular Orbitals` for the canonical-MO table used to compute Λ, w17max, w78max, and wCNmax. Confirm NBO7 actually ran by checking for the `NBO 7.0` banner — if the log says `Gaussian NBO Version 3.1` instead, `pop=nbo7read` didn't take effect and CMO will be silently missing (see "NBO7 setup" below).
+
+**Descriptor extraction** (post-processing on completed `.log` files, see Notes.md for the full formula derivations):
+
+```bash
+python scripts/dft/parse_nbo.py    # -> data/output/analysis/nbo_e2pert.csv
+python scripts/dft/parse_cmo.py    # -> data/output/analysis/cmo_descriptors.csv  (Lambda, w17max, w78max, wCNmax)
+python scripts/dft/descriptors.py  # -> data/output/analysis/channel_descriptors.csv (Psi)
+                                    #    data/output/analysis/descriptor_slopes.csv   (least-squares d/dR)
+```
+
+`Lambda = w78max / max(w17max, 1e-3)` and `Psi = K_anti / (K_frag + epsilon)` are channel-resolved ratios (rearrangement-channel vs. fragmentation-channel), not unrestricted maxima — validated against an external reference log from the paper (`5_s0_Me.log`, compound 3) in `scripts/analysis/validate_reference_descriptors.py`.
 
 ## HPC submission (Citadel)
 

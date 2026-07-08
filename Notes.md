@@ -197,14 +197,137 @@ After the crossing (R ≥ 1.8119 Å):
 
 The decreasing Ψ slope (d/dR = −3.6 Å⁻¹) means aryl's relative advantage over alkyl SHRINKS as the reaction proceeds, consistent with the fragmentation outcome.
 
-### What's still needed
+**Caveat on the Ψ number above:** this early hand calculation used a simplified proxy,
+`E2_aryl / E2_alkyl` where both donors feed the *same* acceptor (the N-O σ*). The
+preprint's actual Ψ definition (below, now implemented in code) is different: the
+denominator `K_frag` is a **sum over every donor** feeding a **different** acceptor
+(the developing alkyl/fragmentation-channel antibond `σ*(C_ox-C_alkyl)`), not a single
+E2 value into the N-O channel. Don't reuse the 3.74/3.46/... numbers above as if they
+were Ψ in the paper's sense — they aren't, they were an earlier ad-hoc approximation.
 
-1. **CMO analysis (Λ, wCNmax):** Requires gennbo7 on a `.47` archive. The Stage 2 `_nbo.gjf` includes `ARCHIVE FILE=mol_002_E` submit Stage 2 then run `gennbo.i8.exe mol_002_E.47` with CMO.
-2. **Remaining test set molecules (006, 020, 021):** Run the full pipeline so we have scan data for all 4 test molecules to compare CN-handoff across R vs F outcomes.
+### CMO analysis: DONE (superseding the "still needed" note below)
+
+CMO output comes directly from `pop=nbo7read` -- no separate `gennbo7`/`.47`-archive
+post-processing step is needed (that was only ever necessary as a workaround while we
+thought we were stuck with the bundled NBO 3.1; see the "NBO7 setup on Citadel"
+section in CLAUDE.md for how `pop=nbo7read` was made to actually work). All 4 test
+molecules (002, 006, 020, 021) have complete NBO7+CMO data at all 5 N-O scan points.
+
+---
+
+## Corrected descriptor formulas (per "Ring Size and Substituent Effects in the
+## Beckmann Rearrangement", Sections 2.2-2.5) -- implemented in `beckmann/dft/parse_cmo.py`
+## and `beckmann/dft/descriptors.py`
+
+The original task description below (the "Implement Orbital Resolved Electron Routing
+Framework" section) described Λ, Ψ, and wCNmax only in prose, before the preprint was
+available for direct comparison. An earlier version of this codebase implemented Λ as
+an **unrestricted max over the whole virtual window** -- that was wrong. This section
+documents the corrected, paper-matched formulas actually implemented now.
+
+**Aryl/alkyl role tagging (`beckmann/dft/descriptors.py::get_substituent_map()`):**
+Every downstream channel-resolved descriptor needs to know which of the two carbons
+bonded to the oxime carbon (`ci`) is the aryl-side substituent (`c_aryl`, migrates in
+rearrangement) and which is the alkyl-side substituent (`c_alkyl`, leaves in
+fragmentation). This is derived **fresh via RDKit** on every run -- loads
+`best_per_substrate.sdf`, reuses `beckmann.analysis.classical.get_oxime_atoms()`
+(checks `GetIsAromatic()` on each neighbor of the oxime carbon), and cross-validates
+the result against the independently-derived `(ci, ni, oi)` parsed from the
+molecule's own `.gjf` title line -- a mismatch raises rather than silently trusting
+either source. Deliberately does **not** read the pre-computed `c_aryl_idx`/
+`c_allyl_idx` columns already sitting in `classical_rule_results.csv` (even though
+they'd give the identical answer) -- kept independent of that CSV/script by design.
+
+**wX^max (generic form, covers `w17max`, `w78max`, and `wcnmax`):** for a target
+antibond X, scan every virtual MO from the LUMO up to LUMO+0.4 a.u., take X's
+coefficient in that MO's CMO expansion (0 if X doesn't appear in the printed >5%
+list -- see caveat below), square it, take the max across the window. Both the
+`BD*(1)` (sigma) and `BD*(2)` (pi) components of X are eligible; whichever gives the
+larger squared coefficient wins for that MO.
+- `w17max` = wX^max for X = `BD*(C{ci}-C{c_aryl})` (rearrangement channel)
+- `w78max` = wX^max for X = `BD*(C{ci}-C{c_alkyl})` (fragmentation channel)
+- `wcnmax` = wX^max for X = `BD*(C{ci}-N{ni})` (nitrilium/routing channel)
+
+**Caveat on "0 if X doesn't appear":** Gaussian's CMO printout only lists contributions
+above a 5% threshold ("Leading (> 5%) NBO Contributions to Molecular Orbitals"). A
+missing entry means the coefficient's *square* is below 0.05 (|coefficient| < ~0.22),
+not necessarily exactly zero. Treating "not printed" as "0" (per the formula's own
+wording) is a defensible engineering approximation, but it does mean `w17max`/`w78max`
+come out as `None` fairly often in our own 4 test molecules -- when that happens for
+`w17max` specifically, `Lambda` hits its `1e-3` floor and swings to large values
+(seen up to ~117 for mol_002). This is the formula behaving exactly as specified, not
+a parsing bug, but it's worth flagging: it means Lambda's magnitude is quite sensitive
+to whether the rearrangement-channel antibond happens to clear the 5% print cutoff at
+a given geometry, not a smoothly-varying quantity.
+
+**Lambda (`beckmann/dft/parse_cmo.py::compute_descriptors()`):**
+```
+Lambda     = max(w78max) / max(max(w17max), 1e-3)
+log_lambda = log10(Lambda)
+```
+A fragmentation-channel-over-rearrangement-channel dominance ratio -- **not** an
+unrestricted max (the earlier, wrong version of this code). Floor is on the
+denominator only, per the paper.
+
+**Psi (`beckmann/dft/descriptors.py::compute_psi_row()`):**
+```
+Psi = K_anti / (K_frag + epsilon)
+```
+- `K_anti` = E2PERT stabilization from donor `BD(C{c_aryl}-C{ci})` into acceptor
+  `BD*(N{ni}-O{oi})` (summed if both sigma and pi donor components are present,
+  though in practice this bond is a single sigma bond so usually only one row
+  matches).
+- `K_frag` = **sum** of every E2PERT row whose acceptor is `BD*(C{ci}-C{c_alkyl})`,
+  regardless of donor. Verified by hand against `5_s0_Me.log`'s raw E2PERT table
+  (16 separate donor rows summing to exactly `K_frag = 21.11` kcal/mol -- see Task 5
+  validation below).
+- `epsilon = 1e-6` -- **not specified anywhere in the paper or Tetiana's handouts**.
+  Only matters when `K_frag ≈ 0`. Flagged for confirmation with Tetiana/Carrie, not
+  a settled choice.
+
+**d/dR (`beckmann/dft/descriptors.py::least_squares_slope()`):** ordinary
+least-squares slope over the 5-point R(N-O) series (`slope =
+sum((R_i-mean(R))*(y_i-mean(y))) / sum((R_i-mean(R))**2)`), computed for Psi,
+log10(Lambda), wCNmax, w17max, w78max. The 5-point series uses stages
+`["nbo", "sp2", "sp3", "sp4", "scan_2"]` -- `nbo` and `scan_1` are the same R0
+geometry (see parse_nbo.py/parse_cmo.py docstrings), so `scan_1` is skipped to avoid
+double-counting one point in the regression.
+
+### Task 5 validation against `5_s0_Me.log` (Tetiana's reference log, compound 3 / Me)
+
+Run via `scripts/analysis/validate_reference_descriptors.py`.
+
+**Gotcha found and handled:** this log's route line includes `Stable=Opt`, which
+triggers a wavefunction stability re-test and reruns population analysis -- the file
+contains **two** full NBO/CMO sections (two `NBO 7.0` banners, two `Normal
+termination` lines), not one. Always use the **last** occurrence of each, per the
+handout's own warning. Our own pipeline's `.gjf` files don't use `Stable=Opt`, so this
+only matters for reading this one external reference file, not our regular molecules.
+
+**Tier 1 (single-geometry, R0 only) -- PASSED:** `wCNmax = 0.457` at MO 32
+(coefficient `-0.676`, `BD*(2) C7-N17`), exactly matching the wCNmax handout's worked
+example. `K_anti`/`K_frag` sums verified by hand against the raw E2PERT table.
+`Psi = 0.478` at R0 -- lower than 1 (fragmentation-channel stabilization exceeds
+rearrangement-channel stabilization at equilibrium, even though compound 3
+experimentally rearranges). Table 2 only reports `d/dR(Psi)`, not an absolute-value
+threshold, and all 4 compounds in Table 2 show *positive* `d/dR(Psi)` regardless of
+R/F outcome -- so a sub-1 Psi at R0 may not actually be surprising. Not confirmed
+either way (Section 3.2's text wasn't read, out of scope for this task).
+
+**Tier 2 (d/dR slope validation against Table 2) -- BLOCKED:** only `5_s0_Me.log`
+(R0) exists in the repo for compound 3. Table 2's `d/dR` values need all 5 scan
+points. Not approximated from one point -- the other 4 scan-point logs need to be
+requested from Tetiana.
 
 ---
 
 ## Implement Orbital Resolved Electron Routing Framework
+
+*(Original task prompt, kept for history. The prose descriptions of Λ/Ψ/wCNmax below
+are ambiguous as literal formulas -- an earlier version of the code got Λ wrong as a
+result. See "Corrected descriptor formulas" above for the precise, paper-matched
+definitions actually implemented now.)*
+
 Goal: Implement orbital resolved electron routing framework: move beyond single point ground state analysis and perform relaxed potential energy surface (PES) scans to capture electronic reorganization preceding bond cleavage. Selective rearrangement is determined by a specific avoided crossing event in the virtual manifold as N-O bond elongates. 
 
 N-OH2 bond stretch: Gaussian will perform an optimization at the initial distance, then increment by 0.1 Å and re-optimize the rest of the molecule for each of the 5 snapshots
