@@ -17,3 +17,6 @@ MULTIPLICITY = 1
 # Gaussian's external-program interface (gaunbo7 -> g16nbo -> nbo7.i8.exe)
 # instead of the bundled NBO 3.1, which doesn't support CMO at all.
 NBO_KEYWORDS = "E2PERT BNDIDX NBOSUM CMO"
+# Per supervisor: mimic experimental (aqueous) conditions in every calculation
+# -- no gas-phase runs. SMD/water, added to every route line below.
+SOLVENT = "scrf=(smd,solvent=water)"

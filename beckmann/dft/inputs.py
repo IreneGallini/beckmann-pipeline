@@ -15,7 +15,7 @@ from rdkit import Chem
 from beckmann.config import (
     DATA_OUTPUT,
     FUNCTIONAL, BASIS, NPROC, MEM_GB, CHARGE, MULTIPLICITY,
-    NBO_KEYWORDS,
+    NBO_KEYWORDS, SOLVENT,
 )
 
 TEST_IDS  = {"002", "006", "020", "021"}
@@ -30,7 +30,7 @@ def _opt_gjf(name: str, coords: list[tuple], oxime_label: str) -> str:
         f"%chk={name}_opt.chk\n"
         f"%nprocshared={NPROC}\n"
         f"%mem={MEM_GB}GB\n"
-        f"#p {FUNCTIONAL}/{BASIS} opt\n"
+        f"#p {FUNCTIONAL}/{BASIS} opt {SOLVENT}\n"
         f"\n"
         f"{name} opt  {oxime_label}\n"
         f"\n"
@@ -56,7 +56,7 @@ def _nbo_gjf(name: str, oxime_label: str) -> str:
         f"%oldchk={name}_opt.chk\n"
         f"%nprocshared={NPROC}\n"
         f"%mem={MEM_GB}GB\n"
-        f"#p {FUNCTIONAL}/{BASIS} sp pop=nbo7read geom=checkpoint guess=read\n"
+        f"#p {FUNCTIONAL}/{BASIS} sp pop=nbo7read geom=checkpoint guess=read {SOLVENT}\n"
         f"\n"
         f"{name} NBO  {oxime_label}\n"
         f"\n"
@@ -74,7 +74,7 @@ def _scan_gjf(name: str, ni: int, oi: int, oxime_label: str) -> str:
         f"%oldchk={name}_opt.chk\n"
         f"%nprocshared={NPROC}\n"
         f"%mem={MEM_GB}GB\n"
-        f"#p {FUNCTIONAL}/{BASIS} opt=(ModRedundant,MaxCycles=200) pop=nbo7read geom=checkpoint guess=read\n"
+        f"#p {FUNCTIONAL}/{BASIS} opt=(ModRedundant,MaxCycles=200) pop=nbo7read geom=checkpoint guess=read {SOLVENT}\n"
         f"\n"
         f"{name} scan  {oxime_label}\n"
         f"\n"
@@ -152,7 +152,7 @@ def _sp_gjf(name: str, coords: list[tuple], oxime_label: str) -> str:
         f"%chk={name}.chk\n"
         f"%nprocshared={NPROC}\n"
         f"%mem={MEM_GB}GB\n"
-        f"#p {FUNCTIONAL}/{BASIS} sp pop=nbo7read\n"
+        f"#p {FUNCTIONAL}/{BASIS} sp pop=nbo7read {SOLVENT}\n"
         f"\n"
         f"{name}  {oxime_label}\n"
         f"\n"
