@@ -248,6 +248,24 @@ larger squared coefficient wins for that MO.
 - `w78max` = wX^max for X = `BD*(C{ci}-C{c_alkyl})` (fragmentation channel)
 - `wcnmax` = wX^max for X = `BD*(C{ci}-N{ni})` (nitrilium/routing channel)
 
+**Per-geometry channel extraction (`data/output/analysis/cmo_channel_extraction.csv`,
+`beckmann/dft/parse_cmo.py::compute_channel_weights()`):** the wX^max summary columns
+above are a max over the whole virtual window, which throws away *which* MO achieved
+that max. Since canonical MOs are energy-ordered and can swap character between scan
+points (e.g. the CN channel's leading MO could be MO 49 at one R and a different index
+at the next), that identity shift matters for anything that wants to look at what's
+actually happening around an extremum -- e.g. an avoided-crossing check (small
+eigenvalue gap + character exchange between two nearby virtual MOs right around a
+wCNmax extremum), which isn't implemented yet but needs this data preserved to be
+built later. This CSV has one row per `(mol, stage, channel)` for `channel` in
+`{cn, 17, 78}`, with columns `R_NO, MO_index, epsilon_i_star, coefficient, weight` --
+`weight` is exactly the corresponding wX^max value, `coefficient` is the signed value
+before squaring, `epsilon_i_star` is that MO's orbital energy (canonical MO
+eigenvalue). This is additive to `cmo_descriptors.csv`, not a replacement -- the
+existing summary columns are unchanged. `scripts/analysis/summarize_descriptors.py`'s
+wCNmax-extremum check backfills `MO_index`/`epsilon_i_star` from this table when an
+extremum is found, rather than only reporting a bare yes/no.
+
 **Caveat on "0 if X doesn't appear":** Gaussian's CMO printout only lists contributions
 above a 5% threshold ("Leading (> 5%) NBO Contributions to Molecular Orbitals"). A
 missing entry means the coefficient's *square* is below 0.05 (|coefficient| < ~0.22),

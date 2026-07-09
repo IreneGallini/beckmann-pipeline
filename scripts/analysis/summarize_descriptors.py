@@ -54,23 +54,40 @@ def load_series(mol: str, channel_rows: list[dict]) -> tuple[list[float], dict[s
     return r_values, y_by_descriptor
 
 
-def has_interior_extremum(r_values: list[float], y_values: list[float | None]) -> bool:
-    """True if there's a local min or max strictly between the first and last point (paper's wCNmax signature)."""
-    pts = [(r, y) for r, y in zip(r_values, y_values) if y is not None]
+def find_wcnmax_extremum(mol: str, extraction_rows: list[dict]) -> dict | None:
+    """R_star/w_star/MO_index/epsilon_i_star at the interior wCNmax extremum, if any.
+
+    MO_index/epsilon_i_star are backfilled from cmo_channel_extraction.csv's 'cn'
+    channel rows (beckmann/dft/parse_cmo.py) rather than recomputed here -- that's
+    the only place which virtual MO achieved the max weight, and its orbital energy,
+    are actually recorded.
+    """
+    rows = [
+        r for r in extraction_rows
+        if r["mol"] == mol and r["channel"] == "cn" and r["stage"] in SERIES_STAGES
+        and r["weight"] not in (None, "", "None")
+    ]
+    pts = [(float(r["R_NO"]), float(r["weight"]), r["MO_index"], r["epsilon_i_star"]) for r in rows]
     if len(pts) < 3:
-        return False
-    pts.sort()
+        return None
+    pts.sort(key=lambda p: p[0])
     for i in range(1, len(pts) - 1):
-        y_prev, y_cur, y_next = pts[i - 1][1], pts[i][1], pts[i + 1][1]
-        if (y_cur < y_prev and y_cur < y_next) or (y_cur > y_prev and y_cur > y_next):
-            return True
-    return False
+        _, w_prev, _, _ = pts[i - 1]
+        r_cur, w_cur, mo_cur, eps_cur = pts[i]
+        _, w_next, _, _ = pts[i + 1]
+        if (w_cur < w_prev and w_cur < w_next) or (w_cur > w_prev and w_cur > w_next):
+            return {
+                "R_star": r_cur, "w_star": w_cur, "MO_index": mo_cur,
+                "epsilon_i_star": float(eps_cur) if eps_cur not in (None, "", "None") else None,
+            }
+    return None
 
 
 def main() -> None:
-    channel_rows = _read_csv(ANALYSIS_DIR / "channel_descriptors.csv")
-    slopes_rows  = {row["mol"]: row for row in _read_csv(ANALYSIS_DIR / "descriptor_slopes.csv")}
-    outcomes     = json.loads((DATA_INPUT / "benchmark_meta.json").read_text())
+    channel_rows    = _read_csv(ANALYSIS_DIR / "channel_descriptors.csv")
+    slopes_rows     = {row["mol"]: row for row in _read_csv(ANALYSIS_DIR / "descriptor_slopes.csv")}
+    extraction_rows = _read_csv(ANALYSIS_DIR / "cmo_channel_extraction.csv")
+    outcomes        = json.loads((DATA_INPUT / "benchmark_meta.json").read_text())
 
     mols = sorted({row["mol"] for row in channel_rows})
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -114,8 +131,14 @@ def main() -> None:
         mol_id = mol.split("_")[1]
         outcome = outcomes[f"mol_{mol_id}"]["exp_outcome"]
         slopes = slopes_rows[mol]
-        r_values, y_by_descriptor = per_mol_series[mol]
-        extremum = "yes" if has_interior_extremum(r_values, y_by_descriptor["wcnmax"]) else "no"
+        extremum_info = find_wcnmax_extremum(mol, extraction_rows)
+        if extremum_info is None:
+            extremum = "no"
+        else:
+            extremum = (
+                f"yes @ R={extremum_info['R_star']:.4f} (MO {extremum_info['MO_index']}, "
+                f"epsilon={extremum_info['epsilon_i_star']:.4f} a.u.)"
+            )
 
         def fmt(key):
             val = slopes.get(key)

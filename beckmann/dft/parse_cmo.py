@@ -22,7 +22,16 @@ c_aryl/c_alkyl come from beckmann.dft.descriptors.get_substituent_map() (fresh
 RDKit aromaticity check, not any pre-computed CSV).
 
 One row per (mol, stage, r_no) -- same grain as nbo_e2pert.csv.
-Output: data/output/analysis/cmo_descriptors.csv
+Output: data/output/analysis/cmo_descriptors.csv (summary: w17max/w78max/wcnmax/Lambda)
+        data/output/analysis/cmo_channel_extraction.csv (per-channel detail: which MO
+        carried the max weight at each geometry, its orbital energy, and the raw signed
+        coefficient before squaring -- the wX^max summary columns above are a max over
+        this data, but which MO achieves it can shift identity between scan points
+        (canonical MOs are energy-ordered and can change character along the scan), so
+        that intermediate detail is kept here rather than discarded. This is what a
+        later avoided-crossing check (small eigenvalue gap + character exchange between
+        two nearby virtual MOs near the wCNmax extremum) would need -- not implemented
+        yet, this module only preserves the data for it.
 """
 import csv
 import math
@@ -50,6 +59,17 @@ FIELDS = [
     "wcnmax", "wcnmax_mo",
     "max_leading_weight", "max_leading_weight_mo",
     "n_virtual_mos_in_window",
+]
+
+# channel name -> which two atoms bound the target antibond BD*(C{ci}-{atom for b})
+CHANNEL_TARGETS = {
+    "cn": lambda ci, ni, c_aryl, c_alkyl: (ci, ni),
+    "17": lambda ci, ni, c_aryl, c_alkyl: (ci, c_aryl),
+    "78": lambda ci, ni, c_aryl, c_alkyl: (ci, c_alkyl),
+}
+
+EXTRACTION_FIELDS = [
+    "mol", "stage", "channel", "R_NO", "MO_index", "epsilon_i_star", "coefficient", "weight",
 ]
 
 
@@ -108,20 +128,36 @@ def is_target_antibond(label: str, a: int, b: int) -> bool:
     return has_a and has_b
 
 
-def max_weight_for_target(window: list[dict], a: int, b: int) -> tuple[float | None, int | None]:
-    """Max squared coefficient, across the window, of the BD* antibond between atoms a and b."""
-    best_val = best_mo = None
+def max_weight_for_target(window: list[dict], a: int, b: int) -> tuple[float | None, int | None, float | None, float | None]:
+    """Max squared coefficient, across the window, of the BD* antibond between atoms a and b.
+
+    Returns (weight, mo_index, epsilon_i_star, coefficient) -- the orbital energy and
+    signed coefficient of the MO that achieves the max, not just the final weight.
+    """
+    best_val = best_mo = best_epsilon = best_coeff = None
     for mo in window:
         for coeff, label in mo["contribs"]:
             if is_target_antibond(label, a, b):
                 w = coeff ** 2
                 if best_val is None or w > best_val:
-                    best_val, best_mo = w, mo["mo"]
-    return best_val, best_mo
+                    best_val, best_mo, best_epsilon, best_coeff = w, mo["mo"], mo["energy"], coeff
+    return best_val, best_mo, best_epsilon, best_coeff
 
 
-def compute_descriptors(mo_table: list[dict], ci: int, ni: int, c_aryl: int, c_alkyl: int) -> dict:
+def compute_channel_weights(window: list[dict], ci: int, ni: int, c_aryl: int, c_alkyl: int) -> dict:
+    """Raw (weight, mo_index, epsilon_i_star, coefficient) per channel: 'cn', '17', '78'."""
+    return {
+        name: max_weight_for_target(window, *target(ci, ni, c_aryl, c_alkyl))
+        for name, target in CHANNEL_TARGETS.items()
+    }
+
+
+def compute_descriptors(mo_table: list[dict], ci: int, ni: int, c_aryl: int, c_alkyl: int) -> tuple[dict, dict]:
+    """Returns (summary_dict, channels) -- channels is the raw per-channel detail
+    (weight, mo_index, epsilon_i_star, coefficient) that the summary's wX^max/wX^max_mo
+    columns are themselves derived from, kept around for the extraction table."""
     window = virtual_window(mo_table)
+    channels = compute_channel_weights(window, ci, ni, c_aryl, c_alkyl)
 
     max_leading_val = max_leading_mo = None
     for mo in window:
@@ -132,14 +168,14 @@ def compute_descriptors(mo_table: list[dict], ci: int, ni: int, c_aryl: int, c_a
         if max_leading_val is None or w > max_leading_val:
             max_leading_val, max_leading_mo = w, mo["mo"]
 
-    w17max, w17max_mo = max_weight_for_target(window, ci, c_aryl)
-    w78max, w78max_mo = max_weight_for_target(window, ci, c_alkyl)
-    wcnmax, wcnmax_mo = max_weight_for_target(window, ci, ni)
+    wcnmax, wcnmax_mo, _, _ = channels["cn"]
+    w17max, w17max_mo, _, _ = channels["17"]
+    w78max, w78max_mo, _, _ = channels["78"]
 
     lambda_val  = (w78max or 0.0) / max(w17max or 0.0, LAMBDA_FLOOR)
     log_lambda  = math.log10(lambda_val) if lambda_val > 0 else None
 
-    return {
+    summary = {
         "lambda": lambda_val, "log_lambda": log_lambda,
         "w17max": w17max, "w17max_mo": w17max_mo,
         "w78max": w78max, "w78max_mo": w78max_mo,
@@ -147,10 +183,15 @@ def compute_descriptors(mo_table: list[dict], ci: int, ni: int, c_aryl: int, c_a
         "max_leading_weight": max_leading_val, "max_leading_weight_mo": max_leading_mo,
         "n_virtual_mos_in_window": len(window),
     }
+    return summary, channels
 
 
 def parse_log(log_path: Path, ci: int, ni: int, oi: int, c_aryl: int, c_alkyl: int) -> list[dict]:
-    """Compute descriptors for every CMO table in a .log file, tagged with R(N-O)."""
+    """Compute descriptors for every CMO table in a .log file, tagged with R(N-O).
+
+    Each returned row carries the summary fields plus '_channels' (raw per-channel
+    weight/mo/epsilon/coefficient detail, popped off by collect_molecule()).
+    """
     lines  = log_path.read_text().splitlines()
     starts = find_cmo_sections(lines)
     rows = []
@@ -159,17 +200,24 @@ def parse_log(log_path: Path, ci: int, ni: int, oi: int, c_aryl: int, c_alkyl: i
         if not table:
             continue
         r_no = r_no_before(lines, start, ni, oi)
-        row = compute_descriptors(table, ci, ni, c_aryl, c_alkyl)
-        row["r_no"] = round(r_no, 4) if r_no is not None else None
-        rows.append(row)
+        summary, channels = compute_descriptors(table, ci, ni, c_aryl, c_alkyl)
+        summary["r_no"] = round(r_no, 4) if r_no is not None else None
+        summary["_channels"] = channels
+        rows.append(summary)
     return rows
 
 
-def collect_molecule(mol: str, mol_dir: Path, c_aryl: int, c_alkyl: int) -> list[dict]:
-    """Compute descriptors for all available stage logs of one molecule, e.g. 'mol_002_E'."""
+def collect_molecule(mol: str, mol_dir: Path, c_aryl: int, c_alkyl: int) -> tuple[list[dict], list[dict]]:
+    """Compute descriptors for all available stage logs of one molecule, e.g. 'mol_002_E'.
+
+    Returns (summary_rows, channel_extraction_rows) -- the latter is the per-geometry,
+    per-channel (cn/17/78) detail table: which MO carried the max weight, its orbital
+    energy, and the signed coefficient before squaring.
+    """
     ci, ni, oi, _ = oxime_atom_map_from_gjf(mol_dir / f"{mol}_opt.gjf")
 
-    all_rows = []
+    summary_rows = []
+    channel_rows = []
     for stage in STAGES:
         log_path = mol_dir / f"{mol}_{stage}.log"
         if not log_path.exists():
@@ -181,17 +229,26 @@ def collect_molecule(mol: str, mol_dir: Path, c_aryl: int, c_alkyl: int) -> list
             sorted(rows, key=lambda r: (r["r_no"] is None, r["r_no"])), start=1
         ):
             stage_label = f"{stage}_{point}" if len(rows) > 1 else stage
-            all_rows.append({"mol": mol, "stage": stage_label, **row})
+            channels = row.pop("_channels")
+            summary_rows.append({"mol": mol, "stage": stage_label, **row})
+            for channel_name, (weight, mo_index, epsilon, coeff) in channels.items():
+                channel_rows.append({
+                    "mol": mol, "stage": stage_label, "channel": channel_name,
+                    "R_NO": row["r_no"], "MO_index": mo_index,
+                    "epsilon_i_star": epsilon, "coefficient": coeff, "weight": weight,
+                })
 
-    return all_rows
+    return summary_rows, channel_rows
 
 
 def main() -> None:
     dft_opt_dir = DATA_OUTPUT / "dft_opt"
-    out_path    = DATA_OUTPUT / "analysis" / "cmo_descriptors.csv"
+    out_path        = DATA_OUTPUT / "analysis" / "cmo_descriptors.csv"
+    extraction_path = DATA_OUTPUT / "analysis" / "cmo_channel_extraction.csv"
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     all_rows = []
+    all_channel_rows = []
     for mol_id in sorted(TEST_IDS):
         mol     = f"mol_{mol_id.zfill(3)}_E"
         mol_dir = dft_opt_dir / mol
@@ -199,7 +256,7 @@ def main() -> None:
             print(f"-- {mol}: no directory, skipping")
             continue
         subst = get_substituent_map(mol, mol_dir)
-        rows = collect_molecule(mol, mol_dir, subst["c_aryl"], subst["c_alkyl"])
+        rows, channel_rows = collect_molecule(mol, mol_dir, subst["c_aryl"], subst["c_alkyl"])
         print(f"-- {mol} (aryl=C{subst['c_aryl']}, alkyl=C{subst['c_alkyl']}): {len(rows)} stage points")
         for row in sorted(rows, key=lambda r: r["stage"]):
             print(
@@ -208,13 +265,19 @@ def main() -> None:
                 f"w17max={row['w17max']}  w78max={row['w78max']}  wCNmax={row['wcnmax']}"
             )
         all_rows.extend(rows)
+        all_channel_rows.extend(channel_rows)
 
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDS)
         writer.writeheader()
         writer.writerows(all_rows)
-
     print(f"\n{len(all_rows)} total rows -> {out_path}")
+
+    with open(extraction_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=EXTRACTION_FIELDS)
+        writer.writeheader()
+        writer.writerows(all_channel_rows)
+    print(f"{len(all_channel_rows)} total rows -> {extraction_path}")
 
 
 if __name__ == "__main__":
