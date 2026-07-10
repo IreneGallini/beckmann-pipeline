@@ -19,10 +19,78 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from aimnet.calculators import AIMNet2Calculator, AIMNet2ASE
+from ase.calculators.calculator import Calculator as ASECalculator, all_changes
+from ase.calculators.mixing import SumCalculator
 from ase.optimize import LBFGS
 from ase import Atoms
 
 from beckmann.config import DATA_OUTPUT
+
+
+class HarmonicBondRestraint(ASECalculator):
+    """Smooth harmonic bias E = 0.5*k*(r-r0)^2 on a set of atom-pair distances.
+
+    Used to bias relax_geometry() toward a specific bond length (e.g. a forming
+    or breaking bond) without a hard geometric constraint -- ASE's FixBondLength
+    uses an iterative RATTLE-style solver that can fail to converge when two
+    constraints share an atom (seen in practice restraining both a forming and a
+    leaving bond at the same central atom). A smooth energy bias has no such
+    convergence failure mode; it's just additional forces stacked via SumCalculator.
+    """
+    implemented_properties = ["energy", "forces"]
+
+    def __init__(self, restraints: list[tuple[int, int, float, float]]):
+        """restraints: list of (atom_i, atom_j, target_distance_angstrom, k_eV_per_A2)."""
+        super().__init__()
+        self.restraints = restraints
+
+    def calculate(self, atoms=None, properties=("energy", "forces"), system_changes=all_changes):
+        super().calculate(atoms, properties, system_changes)
+        pos = atoms.get_positions()
+        energy = 0.0
+        forces = np.zeros_like(pos)
+        for i, j, r0, k in self.restraints:
+            vec = pos[j] - pos[i]
+            r = np.linalg.norm(vec)
+            dr = r - r0
+            energy += 0.5 * k * dr ** 2
+            direction = vec / r
+            f = (-k * dr) * direction
+            forces[j] += f
+            forces[i] -= f
+        self.results["energy"] = energy
+        self.results["forces"] = forces
+
+
+def relax_geometry(
+    atoms: Atoms,
+    charge: int,
+    model: str = "aimnet2_2025",
+    base_calc: AIMNet2Calculator | None = None,
+    fmax: float = 0.05,
+    restraints: list[tuple[int, int, float, float]] | None = None,
+) -> tuple[Atoms, float]:
+    """Relax an ASE Atoms object in place with AIMNet2/LBFGS.
+
+    Returns (relaxed_atoms, energy_ev). Pass a pre-built base_calc to avoid reloading
+    model weights across repeated calls (e.g. relaxing several product/intermediate
+    geometries for the same substrate in beckmann.dft.ts_products). Pass `restraints`
+    (atom_i, atom_j, target_distance, k) pairs to bias specific bond distances toward
+    a target during this relaxation -- e.g. to hold a forming/breaking bond away from
+    the reactant's own value so the optimizer can't just roll back downhill into it.
+    energy_ev is the AIMNet2 energy alone (restraint bias excluded).
+    """
+    if base_calc is None:
+        base_calc = AIMNet2Calculator(model)
+    aimnet_calc = AIMNet2ASE(base_calc, charge=charge)
+    if restraints:
+        atoms.calc = SumCalculator([aimnet_calc, HarmonicBondRestraint(restraints)])
+    else:
+        atoms.calc = aimnet_calc
+    opt = LBFGS(atoms, logfile=None)
+    opt.run(fmax=fmax)
+    energy_ev = aimnet_calc.results["energy"]
+    return atoms, energy_ev
 
 
 def select_and_optimize(
@@ -71,12 +139,7 @@ def select_and_optimize(
             atoms   = Atoms(numbers=numbers, positions=coords)
 
             mol_charge = sum(atom.GetFormalCharge() for atom in mol.GetAtoms())
-            atoms.calc = AIMNet2ASE(base_calc, charge=mol_charge)
-
-            opt = LBFGS(atoms, logfile=None)
-            opt.run(fmax=0.05)
-
-            energy_ev   = atoms.get_potential_energy()
+            atoms, energy_ev = relax_geometry(atoms, charge=mol_charge, base_calc=base_calc)
             energy_kcal = energy_ev * 23.0605
 
             new_conf = mol.GetConformer()
