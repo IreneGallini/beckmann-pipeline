@@ -232,6 +232,65 @@ def cmd_submit_sp(config: dict, dry_run: bool, mol: str | None, local_dir: Path)
     print("\nJobs launched. Monitor with:\n  python scripts/dft/hpc_sync.py status")
 
 
+def cmd_submit_ts(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
+    host       = config["HPC_HOST"]
+    remote_dir = config["HPC_REMOTE_DIR"]
+    print(
+        "\nWARNING: TS (QST2/QST3) jobs carry an analytic CalcFC Hessian plus freq --\n"
+        "         plausibly hours each, more expensive than the N-O scan jobs.\n"
+        "         Submit ONE molecule at a time (both channels together is fine) --\n"
+        "         do not batch across the test set. Confirm before every submission."
+    )
+    pattern = f"mol_{mol.zfill(3)}_*" if mol else "*"
+    g16     = config["G16_PATH"]
+    submit_cmd = (
+        f'{_gauss_exports(config)} && '
+        f'cd {remote_dir} && '
+        f'for dir in {pattern}/; do '
+        '  name="${dir%/}"; '
+        '  (cd "$dir" && for gjf in "${name}"_ts*.gjf; do '
+        '    case "$gjf" in *_irc.gjf) continue ;; esac; '
+        '    [ -f "$gjf" ] || continue; '
+        '    log="${gjf%.gjf}.log"; '
+        f'    nohup {g16} < "$gjf" > "$log" 2>&1 & '
+        '  done); '
+        'done'
+    )
+    print(f"\n-- Launching TS (QST2/QST3) jobs on {host}:{remote_dir}")
+    run(["ssh", host, submit_cmd], dry_run)
+    print("\nTS jobs launched. Monitor with:\n  python scripts/dft/hpc_sync.py status")
+
+
+def cmd_submit_irc(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
+    host       = config["HPC_HOST"]
+    remote_dir = config["HPC_REMOTE_DIR"]
+    print(
+        "\nWARNING: IRC jobs read a TS job's .chk via %oldchk.\n"
+        "         Only proceed once the corresponding TS job shows Normal termination\n"
+        "         AND has passed manual verify_ts() review (exactly one imaginary\n"
+        "         frequency, displacement vector matches the expected reaction\n"
+        "         coordinate) -- do not IRC an unverified stationary point.\n"
+        "         Check first: python scripts/dft/hpc_sync.py status"
+    )
+    pattern = f"mol_{mol.zfill(3)}_*" if mol else "*"
+    g16     = config["G16_PATH"]
+    submit_cmd = (
+        f'{_gauss_exports(config)} && '
+        f'cd {remote_dir} && '
+        f'for dir in {pattern}/; do '
+        '  name="${dir%/}"; '
+        '  (cd "$dir" && for gjf in "${name}"_ts*_irc.gjf; do '
+        '    [ -f "$gjf" ] || continue; '
+        '    log="${gjf%.gjf}.log"; '
+        f'    nohup {g16} < "$gjf" > "$log" 2>&1 & '
+        '  done); '
+        'done'
+    )
+    print(f"\n-- Launching IRC jobs on {host}:{remote_dir}")
+    run(["ssh", host, submit_cmd], dry_run)
+    print("\nIRC jobs launched. Monitor with:\n  python scripts/dft/hpc_sync.py status")
+
+
 def cmd_download(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
     host       = config["HPC_HOST"]
     remote_dir = config["HPC_REMOTE_DIR"]
@@ -294,6 +353,8 @@ def main() -> None:
     sub.add_parser("submit-scan",    help="Submit Stage 3 N-O scan jobs — AFTER Stage 1 finishes")
     sub.add_parser("submit-scan-sp", help="Submit intermediate scan SP jobs — AFTER scan finishes")
     sub.add_parser("submit-sp",      help="Submit single-point NBO jobs (for dft_sp/)")
+    sub.add_parser("submit-ts",      help="Submit QST2/QST3 TS jobs ({name}_ts*.gjf, excl. _irc)")
+    sub.add_parser("submit-irc",     help="Submit IRC jobs — AFTER the matching TS job is verified")
     sub.add_parser("download",       help="Download *.log files from cluster")
     sub.add_parser("status",         help="Show running g16 processes on server")
 
@@ -313,6 +374,8 @@ def main() -> None:
         "submit-scan":    cmd_submit_scan,
         "submit-scan-sp": cmd_submit_scan_sp,
         "submit-sp":      cmd_submit_sp,
+        "submit-ts":      cmd_submit_ts,
+        "submit-irc":     cmd_submit_irc,
         "download":       cmd_download,
         "status":         cmd_status,
     }
