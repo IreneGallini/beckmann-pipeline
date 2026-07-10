@@ -28,7 +28,7 @@ from pathlib import Path
 
 from beckmann.dft.descriptors import PSI_EPSILON, compute_psi_row
 from beckmann.dft.parse_cmo import (
-    find_cmo_sections, parse_cmo_table, virtual_window, max_weight_for_target, LAMBDA_FLOOR,
+    find_cmo_sections, parse_cmo_table, virtual_window, max_weight_for_target,
 )
 from beckmann.dft.parse_nbo import find_table_starts, parse_table_rows
 
@@ -73,10 +73,10 @@ def main() -> None:
     print(f"  w17max = {w17max} (MO {w17max_mo}, epsilon={w17max_eps} a.u., coefficient={w17max_coeff})")
     print(f"  w78max = {w78max} (MO {w78max_mo}, epsilon={w78max_eps} a.u., coefficient={w78max_coeff})")
 
-    lam = (w78max or 0.0) / max(w17max or 0.0, LAMBDA_FLOOR)
     import math
-    log_lam = math.log10(lam) if lam > 0 else None
-    print(f"  Lambda = {lam:.4f}, log_lambda = {log_lam}")
+    lam = w78max / w17max if (w17max is not None and w17max > 0 and w78max is not None) else None
+    log_lam = math.log10(lam) if lam is not None and lam > 0 else None
+    print(f"  Lambda = {lam}, log_lambda = {log_lam}")
     print("  (no single-point reference value exists for Lambda -- Table 2 only reports d/dR log10(Lambda))\n")
 
     e2pert_rows = [

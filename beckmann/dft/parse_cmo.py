@@ -12,11 +12,19 @@ Rearrangement" (Sections 2.2-2.4). See Notes.md for the full derivation.
   w17max     = wX^max for X = BD*(C{ci}-C{c_aryl})  (rearrangement channel)
   w78max     = wX^max for X = BD*(C{ci}-C{c_alkyl}) (fragmentation channel)
   wcnmax     = wX^max for X = BD*(C{ci}-N{ni})      (nitrilium/routing channel)
-  Lambda     = max(w78max) / max(max(w17max), 1e-3) -- fragmentation-channel
-               dominance over rearrangement-channel dominance, NOT an
-               unrestricted max over the whole window (that was the bug in an
-               earlier version of this module -- see Notes.md).
-  log_lambda = log10(Lambda).
+  Lambda     = w78max / w17max -- fragmentation-channel dominance over
+               rearrangement-channel dominance, NOT an unrestricted max over
+               the whole window (that was the bug in an earlier version of
+               this module -- see Notes.md). Left undefined (None) when
+               w17max wasn't found anywhere in the LUMO..LUMO+0.4 window --
+               previously floored to w78max/1e-3 in that case, which silently
+               produced huge Lambda values that were a division-floor
+               artifact, not a real ratio (see JOB_ISSUES.md-adjacent
+               discussion; caught because it inflated Lambda for two
+               substrates where the rearrangement-channel antibond simply
+               sits outside the window, not because the ratio was genuinely
+               extreme).
+  log_lambda = log10(Lambda), also None when Lambda is None.
 
 c_aryl/c_alkyl come from beckmann.dft.descriptors.get_substituent_map() (fresh
 RDKit aromaticity check, not any pre-computed CSV).
@@ -48,8 +56,6 @@ CMO_HEADER = "cmo: nbo analysis of canonical molecular orbitals"
 
 MO_HEADER_RE = re.compile(r"MO\s+(\d+)\s+\((occ|vir)\):\s+orbital energy\s*=\s*(-?\d+\.\d+)\s*a\.u\.")
 CONTRIB_RE   = re.compile(r"^\s*(-?\d+\.\d+)\*\[\s*\d+\]:\s+(.+?)\s*$")
-
-LAMBDA_FLOOR = 1e-3
 
 FIELDS = [
     "mol", "stage", "r_no",
@@ -172,8 +178,8 @@ def compute_descriptors(mo_table: list[dict], ci: int, ni: int, c_aryl: int, c_a
     w17max, w17max_mo, _, _ = channels["17"]
     w78max, w78max_mo, _, _ = channels["78"]
 
-    lambda_val  = (w78max or 0.0) / max(w17max or 0.0, LAMBDA_FLOOR)
-    log_lambda  = math.log10(lambda_val) if lambda_val > 0 else None
+    lambda_val  = w78max / w17max if (w17max is not None and w17max > 0 and w78max is not None) else None
+    log_lambda  = math.log10(lambda_val) if lambda_val is not None and lambda_val > 0 else None
 
     summary = {
         "lambda": lambda_val, "log_lambda": log_lambda,
@@ -259,9 +265,10 @@ def main() -> None:
         rows, channel_rows = collect_molecule(mol, mol_dir, subst["c_aryl"], subst["c_alkyl"])
         print(f"-- {mol} (aryl=C{subst['c_aryl']}, alkyl=C{subst['c_alkyl']}): {len(rows)} stage points")
         for row in sorted(rows, key=lambda r: r["stage"]):
+            lambda_str = f"{row['lambda']:.4f}" if row["lambda"] is not None else "None"
             print(
                 f"     {row['stage']:<8} R(N-O)={row['r_no']}  "
-                f"Lambda={row['lambda']:.4f}  logLambda={row['log_lambda']}  "
+                f"Lambda={lambda_str}  logLambda={row['log_lambda']}  "
                 f"w17max={row['w17max']}  w78max={row['w78max']}  wCNmax={row['wcnmax']}"
             )
         all_rows.extend(rows)
