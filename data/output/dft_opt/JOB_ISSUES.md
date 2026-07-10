@@ -1,9 +1,8 @@
 # DFT job troubleshooting log
 
-Tracked (not gitignored, unlike the `.log` files it references) so failure
-diagnoses survive across sessions. Add a new dated entry any time a Gaussian
-job on Citadel crashes or fails to converge — don't just re-run and forget
-why. Keep the general playbook below up to date as new failure modes show up.
+Add a new dated entry any time a Gaussian
+job on Citadel crashes or fails to converge, don't just re-run and forget
+why. 
 
 ---
 
@@ -30,7 +29,7 @@ alternating every step:
 | B | ≈ -557.30361 | ~0.009 | 1.2820 Å |
 
 Neither state ever approached the 0.00045 threshold; displacement was
-essentially frozen at ~0.068 Å (target 0.0018 Å) for the last ~40+ steps —
+essentially frozen at ~0.068 Å (target 0.0018 Å) for the last ~40+ steps
 classic double-well oscillation, not slow monotonic convergence. The N-O
 distance itself (the frozen scan coordinate) was correctly held fixed
 throughout, so this is a ring-pucker degeneracy problem, unrelated to the
@@ -38,7 +37,7 @@ reaction coordinate.
 
 After hitting the step cap, Gaussian proceeded anyway to the `pop=nbo7read`
 single-point at that unconverged geometry — NBO7 actually completed
-successfully (E2PERT, CMO, NBOSUM all present in the log) — but the job's
+successfully (E2PERT, CMO, NBOSUM all present in the log) but the job's
 exit/cleanup link (`l9999.exe`) then segfaulted, so the log ends in
 `Error termination` rather than `Normal termination` even though usable-looking
 NBO data is sitting in the file. **Do not trust that data** — it's computed on

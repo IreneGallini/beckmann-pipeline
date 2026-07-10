@@ -21,6 +21,22 @@ from beckmann.dft.scan import no_distance, oxime_indices_from_gjf, parse_standar
 TABLE_HEADER = "second order perturbation theory analysis"
 STAGES       = ["nbo", "scan", "sp2", "sp3", "sp4"]
 
+NORMAL_TERMINATION = "Normal termination of Gaussian 16"
+
+
+def log_terminated_normally(log_path: Path) -> bool:
+    """True if the log's final non-blank line reports normal termination.
+
+    A crashed/non-converged job (e.g. mol_020_E's Stage 3 scan -- see
+    JOB_ISSUES.md) can still print complete-looking NBO/E2PERT tables upstream
+    of the crash; that data is computed on a geometry that never converged and
+    must not be trusted just because it parses cleanly.
+    """
+    for line in reversed(log_path.read_text().splitlines()):
+        if line.strip():
+            return NORMAL_TERMINATION in line
+    return False
+
 # NBO7 and NBO 3.1 print this table in different layouts: NBO 3.1 separates
 # donor/acceptor with ' / '; NBO7 just column-aligns them with no delimiter
 # (e.g. '14. LP ( 1) O  2            49. BD*( 1) C  1- H 14      3.47 ...').
@@ -103,8 +119,23 @@ def parse_log(log_path: Path, ni: int, oi: int) -> list[dict]:
 
 
 def collect_molecule(mol: str, mol_dir: Path) -> list[dict]:
-    """Parse all available stage logs for one molecule, e.g. 'mol_002_E'."""
+    """Parse all available stage logs for one molecule, e.g. 'mol_002_E'.
+
+    If any present stage log didn't reach Normal termination, the whole molecule
+    is skipped rather than partially included -- a partial series (missing the
+    failed stage) isn't comparable to the other molecules' full 5-point series,
+    and matches how mol_020_E was previously excluded by hand (see JOB_ISSUES.md).
+    """
     ni, oi, _ = oxime_indices_from_gjf(mol_dir / f"{mol}_opt.gjf")
+
+    bad_logs = [
+        p.name for stage in STAGES
+        if (p := mol_dir / f"{mol}_{stage}.log").exists() and not log_terminated_normally(p)
+    ]
+    if bad_logs:
+        print(f"   -- {mol}: {', '.join(bad_logs)} did not reach Normal termination "
+              f"-- skipping whole molecule (see JOB_ISSUES.md)")
+        return []
 
     all_rows = []
     for stage in STAGES:

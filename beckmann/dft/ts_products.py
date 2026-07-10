@@ -92,9 +92,19 @@ def displace_for_rearrangement(atoms: Atoms, atom_map: dict) -> list[tuple[int, 
     non-bonding distance (dragging O's bonded H's along rigidly). Mutates `atoms`
     in place and returns the restraint list for the first-stage relax_geometry()
     call (see module docstring for why a restraint, not a hard constraint).
+
+    Also restrains C(ci)-C(c_aryl) toward a clearly-broken distance, not just the
+    two above -- verified empirically that relying on this bond's breaking as an
+    emergent side effect of the other two restraints works for some substrates
+    (mol_002_E, mol_006_E) but not others (mol_021_E: after Stage 1 the "forming"
+    N-C(aryl) bond was correctly restrained near target, but C(ci)-C(aryl) had
+    barely elongated at all, 1.47->1.58 A, versus ~2.2-2.3 A for the other two --
+    i.e. it found a different, non-product local arrangement that still
+    satisfies the other two restraints). Restraining all three bonds directly is
+    more robust than counting on emergent relaxation.
     """
     pos = atoms.get_positions().copy()
-    ni, oi = atom_map["ni"] - 1, atom_map["oi"] - 1
+    ci, ni, oi = atom_map["ci"] - 1, atom_map["ni"] - 1, atom_map["oi"] - 1
     c_aryl = atom_map["c_aryl"] - 1
 
     _place_at_distance(pos, ni, c_aryl, N_C_BOND_TARGET)
@@ -107,7 +117,11 @@ def displace_for_rearrangement(atoms: Atoms, atom_map: dict) -> list[tuple[int, 
         pos[idx] = pos[idx] + delta
 
     atoms.set_positions(pos)
-    return [(ni, c_aryl, N_C_BOND_TARGET, RESTRAINT_K), (ni, oi, N_O_LEAVE_TARGET, RESTRAINT_K)]
+    return [
+        (ni, c_aryl, N_C_BOND_TARGET, RESTRAINT_K),
+        (ni, oi, N_O_LEAVE_TARGET, RESTRAINT_K),
+        (ci, c_aryl, C_C_BREAK_TARGET, RESTRAINT_K),
+    ]
 
 
 def displace_for_fragmentation(atoms: Atoms, atom_map: dict) -> list[tuple[int, int, float, float]]:

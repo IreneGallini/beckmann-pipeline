@@ -8,3 +8,10 @@ BeckmanPrediction.cdxml
 Notes.md
 .env
 Ring Size and Substituent Effects in the Beckmann Rearrangement- A Systematic Experimental and DFT Study of Cyclic Oxime Reactivity.pdf
+
+# PySisyphus/AIMNet2-nse TS-search working directories (beckmann.ts_ml.neb) --
+# ~90 intermediate files per run (per-cycle NEB trajectories, IRC checkpoints,
+# optimizer logs, etc.), all regenerable by rerunning the NEB job. Only
+# ts_final_hessian.h5 is ever read by code (beckmann/ts_ml/neb.py:verify_ts_ml),
+# and even that's treated as regenerable working data, not a tracked result.
+data/output/ts_ml/

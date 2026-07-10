@@ -1,0 +1,11 @@
+%chk=mol_002_E_ts1_a1_irc.chk
+%oldchk=mol_002_E_ts1_a1.chk
+%nprocshared=8
+%mem=16GB
+#p wB97XD/6-311+G(d,p) irc=(calcfc,forward,reverse) geom=checkpoint guess=read scrf=(smd,solvent=water)
+
+mol_002_E ts1_a1_irc IRC
+
+1 1
+
+

@@ -59,9 +59,14 @@ def main() -> None:
     lumo_e = window[0]["energy"] if window else None
     print(f"Tier 1: LUMO = {lumo_e} a.u., {len(window)} virtual MOs in the LUMO..LUMO+0.4 window\n")
 
-    wcnmax, wcnmax_mo, wcnmax_eps, wcnmax_coeff = max_weight_for_target(window, CI, NI)
-    w17max, w17max_mo, w17max_eps, w17max_coeff = max_weight_for_target(window, CI, C_ARYL)
-    w78max, w78max_mo, w78max_eps, w78max_coeff = max_weight_for_target(window, CI, C_ALKYL)
+    # max_weight_for_target now searches the full virtual manifold, not just the windowed
+    # subset (see parse_cmo.py -- capping at LUMO+0.4 a.u. silently dropped real, higher-lying
+    # antibond mixing for some substrates). Passed `window` here on purpose: this reference
+    # check is validating against the handout's worked answer, which was itself computed
+    # within that window, so we deliberately keep the search scoped to it.
+    wcnmax, wcnmax_mo, wcnmax_eps, wcnmax_coeff, _, _ = max_weight_for_target(window, CI, NI)
+    w17max, w17max_mo, w17max_eps, w17max_coeff, _, _ = max_weight_for_target(window, CI, C_ARYL)
+    w78max, w78max_mo, w78max_eps, w78max_coeff, _, _ = max_weight_for_target(window, CI, C_ALKYL)
 
     print(
         f"  wCNmax = {wcnmax} (MO {wcnmax_mo}, epsilon={wcnmax_eps} a.u., coefficient={wcnmax_coeff})  "

@@ -174,6 +174,11 @@ def main() -> None:
             print(f"-- {mol}: no directory, skipping")
             continue
         channel_rows = build_channel_descriptors(mol, mol_dir, e2pert_rows, cmo_rows)
+        if not channel_rows:
+            # Upstream parse_nbo/parse_cmo excluded this molecule entirely (e.g. a
+            # stage log that didn't reach Normal termination -- see JOB_ISSUES.md).
+            print(f"-- {mol}: no rows in nbo_e2pert.csv/cmo_descriptors.csv, skipping")
+            continue
         all_channel_rows.extend(channel_rows)
         slopes = compute_slopes(mol, channel_rows)
         all_slopes.append(slopes)
