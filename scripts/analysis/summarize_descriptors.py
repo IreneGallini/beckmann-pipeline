@@ -151,8 +151,9 @@ def main() -> None:
 
     table = "\n".join(lines)
     summary_path = ANALYSIS_DIR / "descriptor_summary.md"
+    mol_ids = ", ".join(f"mol_{mol.split('_')[1]}" for mol in mols)
     summary_path.write_text(
-        "# Descriptor summary (mol_002, 006, 020, 021)\n\n"
+        f"# Descriptor summary ({mol_ids})\n\n"
         "d/dR = least-squares slope over the 5-point N-O scan. "
         "'wCNmax extremum' = interior local min/max in the wCNmax(R) series "
         "(the paper's central signature -- Table 2 reports this only for the one "

@@ -81,9 +81,19 @@ def build_run_dict(reactant_xyz: Path, product_xyz: Path) -> dict:
             "type": "neb",
             "climb": True,
         },
+        # dump=False on both "opt" and "tsopt": PySisyphus defaults dump=True for
+        # COS/tsopt optimizers, which writes a full geometry snapshot (cycle_NNN.trj,
+        # image_N.trj, current/final_geometries.trj, ts_optimization.trj, ...) EVERY
+        # cycle -- ~90 files per run, none of which any code here reads (only
+        # ts_final_hessian.h5 is ever parsed, by verify_ts_ml below). Doesn't affect
+        # ts_final_geometry.xyz/ts_final_hessian.h5 (written unconditionally at the
+        # end via do_final_hessian, not gated by dump) or the IRC trajectories/logs
+        # (no dump toggle exists for those, and they're the actual reactant/product
+        # connectivity evidence -- keep those).
         "opt": {
             "type": "lbfgs",
             "align": True,
+            "dump": False,
         },
         "tsopt": {
             "type": "rsirfo",
@@ -92,6 +102,7 @@ def build_run_dict(reactant_xyz: Path, product_xyz: Path) -> dict:
                                   # AIMNet2's Hessian is cheap; first attempt without
                                   # this left 2 spurious small extra negative modes
                                   # (-97, -9 cm^-1) alongside the real one (-510 cm^-1).
+            "dump": False,
         },
         "irc": {
             "type": "eulerpc",
