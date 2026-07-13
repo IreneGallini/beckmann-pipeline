@@ -154,14 +154,24 @@ def build_channel_descriptors(mol: str, mol_dir: Path, e2pert_rows: list[dict], 
     return out
 
 
-def compute_slopes(mol: str, channel_rows: list[dict]) -> dict:
-    """d/dR for psi, log_lambda, wcnmax, w17max, w78max over the 5-point series."""
-    by_stage = {row["stage"]: row for row in channel_rows if row["mol"] == mol}
+def resolve_series(by_stage: dict) -> list[dict]:
+    """Pick the 5-point R(N-O) series from a {stage: row} map, in SERIES_STAGES
+    order, substituting SERIES_FALLBACK (e.g. 'sp5_2' for 'scan_2') when the
+    primary stage is missing. Shared by compute_slopes() and
+    scripts/analysis/summarize_descriptors.py's plots so both draw from the
+    same points -- see JOB_ISSUES.md, mol_020_E for why the fallback exists."""
     series = []
     for s in SERIES_STAGES:
         key = s if s in by_stage else SERIES_FALLBACK.get(s)
         if key in by_stage:
             series.append(by_stage[key])
+    return series
+
+
+def compute_slopes(mol: str, channel_rows: list[dict]) -> dict:
+    """d/dR for psi, log_lambda, wcnmax, w17max, w78max over the 5-point series."""
+    by_stage = {row["stage"]: row for row in channel_rows if row["mol"] == mol}
+    series = resolve_series(by_stage)
     r_values = [float(row["r_no"]) for row in series]
 
     slopes = {"mol": mol, "n_points": len(series), "r_values": r_values}

@@ -18,7 +18,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 from beckmann.config import DATA_INPUT, DATA_OUTPUT
-from beckmann.dft.descriptors import SERIES_STAGES
+from beckmann.dft.descriptors import resolve_series
 
 ANALYSIS_DIR = DATA_OUTPUT / "analysis"
 PLOTS_DIR    = ANALYSIS_DIR / "plots"
@@ -31,6 +31,10 @@ LABELS = {
     "w17max": "w17max  (rearrangement channel)",
     "w78max": "w78max  (fragmentation channel)",
 }
+# Color still encodes experimental outcome (R vs F) rather than substrate identity --
+# with dozens of substrates eventually, a distinct hue per line stops scaling long
+# before a 2-color R/F split does. Individual lines are told apart by a direct label
+# at the endpoint instead (see main()), not by color.
 OUTCOME_COLOR = {"R": "tab:green", "F": "tab:red"}
 
 
@@ -48,7 +52,7 @@ def _float_or_none(v):
 def load_series(mol: str, channel_rows: list[dict]) -> tuple[list[float], dict[str, list[float | None]]]:
     """R(N-O) values and per-descriptor y-values for the 5-point series, in SERIES_STAGES order."""
     by_stage = {row["stage"]: row for row in channel_rows if row["mol"] == mol}
-    series = [by_stage[s] for s in SERIES_STAGES if s in by_stage]
+    series = resolve_series(by_stage)
     r_values = [float(row["r_no"]) for row in series]
     y_by_descriptor = {d: [_float_or_none(row[d]) for row in series] for d in DESCRIPTORS}
     return r_values, y_by_descriptor
@@ -62,11 +66,11 @@ def find_wcnmax_extremum(mol: str, extraction_rows: list[dict]) -> dict | None:
     the only place which virtual MO achieved the max weight, and its orbital energy,
     are actually recorded.
     """
-    rows = [
-        r for r in extraction_rows
-        if r["mol"] == mol and r["channel"] == "cn" and r["stage"] in SERIES_STAGES
-        and r["weight"] not in (None, "", "None")
-    ]
+    by_stage = {
+        r["stage"]: r for r in extraction_rows
+        if r["mol"] == mol and r["channel"] == "cn" and r["weight"] not in (None, "", "None")
+    }
+    rows = resolve_series(by_stage)
     pts = [(float(r["R_NO"]), float(r["weight"]), r["MO_index"], r["epsilon_i_star"]) for r in rows]
     if len(pts) < 3:
         return None
@@ -100,6 +104,7 @@ def main() -> None:
     # ---- plots ----
     for descriptor in DESCRIPTORS:
         fig, ax = plt.subplots(figsize=(6, 4.5))
+        seen_outcomes = set()
         for mol in mols:
             r_values, y_by_descriptor = per_mol_series[mol]
             y_values = y_by_descriptor[descriptor]
@@ -110,12 +115,23 @@ def main() -> None:
             xs, ys = zip(*pts)
             mol_id = mol.split("_")[1]
             outcome = outcomes[f"mol_{mol_id}"]["exp_outcome"]
-            ax.plot(xs, ys, marker="o", label=f"mol_{mol_id} ({outcome})",
-                     color=OUTCOME_COLOR.get(outcome, "gray"))
+            color = OUTCOME_COLOR.get(outcome, "gray")
+            # One legend entry per outcome (R/F), not per molecule -- individual
+            # lines are identified by the direct label at their endpoint instead,
+            # so the legend stays 2 entries regardless of substrate count.
+            label = outcome if outcome not in seen_outcomes else None
+            seen_outcomes.add(outcome)
+            ax.plot(xs, ys, marker="o", markersize=7, linewidth=2, color=color, label=label)
+            # Direct label at the line's endpoint -- text token color (not the
+            # series color), per beckmann-dataviz: text never wears the data color.
+            ax.annotate(
+                mol_id, (xs[-1], ys[-1]), xytext=(6, 0), textcoords="offset points",
+                fontsize=8, color="dimgray", va="center",
+            )
         ax.set_xlabel("R(N-O)  (Å)")
         ax.set_ylabel(LABELS[descriptor])
         ax.set_title(f"{LABELS[descriptor]} vs. N-O distance")
-        ax.legend()
+        ax.legend(title="outcome")
         fig.tight_layout()
         out_path = PLOTS_DIR / f"{descriptor}.png"
         fig.savefig(out_path, dpi=150)
