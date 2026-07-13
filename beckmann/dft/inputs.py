@@ -18,14 +18,21 @@ from beckmann.config import (
     NBO_KEYWORDS, SOLVENT,
 )
 
-TEST_IDS  = {"002", "006", "020", "021"}
+TEST_IDS  = {"002", "006", "020", "021", "014", "029"}
 OXIME_PAT = Chem.MolFromSmarts('[C:1]=[N:2]-[O+:3]')
+
+
+def resolve_mol_name(mol_id: str, dft_opt_dir: Path) -> str | None:
+    """Find the isomer-suffixed mol dir name for a numeric id (e.g. '014' ->
+    'mol_014_Z') -- the AIMNet2-lower-energy isomer isn't always E."""
+    matches = sorted(dft_opt_dir.glob(f"mol_{mol_id.zfill(3)}_*"))
+    return matches[0].name if matches else None
 
 
 # ── three-stage opt workflow ────────────────────────────────────────────────────
 
 def _opt_gjf(name: str, coords: list[tuple], oxime_label: str) -> str:
-    """Stage 1: geometry optimisation — no NBO block."""
+    """Stage 1: geometry optimisation no NBO block."""
     return (
         f"%chk={name}_opt.chk\n"
         f"%nprocshared={NPROC}\n"
@@ -48,7 +55,7 @@ def _nbo_gjf(name: str, oxime_label: str) -> str:
 
     pop=nbo7read (not nboread) routes through Gaussian's external-program
     interface (Link 612 -> gaunbo7 -> g16nbo -> nbo7), which is required for
-    CMO-based descriptors (Lambda, wCNmax) -- the bundled NBO 3.1 (pop=nboread)
+    CMO-based descriptors (Lambda, wCNmax) the bundled NBO 3.1 (pop=nboread)
     doesn't support CMO at all.
     """
     return (
@@ -68,7 +75,7 @@ def _nbo_gjf(name: str, oxime_label: str) -> str:
 
 
 def _scan_gjf(name: str, ni: int, oi: int, oxime_label: str) -> str:
-    """Stage 3: relaxed N-O bond scan — 5 points (R to R+0.4 Å), NBO7 at each."""
+    """Stage 3: relaxed N-O bond scan 5 points (R to R+0.4 Å), NBO7 at each."""
     return (
         f"%chk={name}_scan.chk\n"
         f"%oldchk={name}_opt.chk\n"
@@ -187,7 +194,7 @@ def prepare_sp(sdf_path: Path, outdir: Path) -> None:
             ci, ni, oi = (idx + 1 for idx in match)
             oxime_label = f"[oxime: C{ci}=N{ni}-O{oi}]"
         else:
-            oxime_label = "[oxime: not found]"
+            oxime_label = "[oxime: not found]" # TODO: show error message in final UI
 
         mol_dir = outdir / name
         mol_dir.mkdir(exist_ok=True)

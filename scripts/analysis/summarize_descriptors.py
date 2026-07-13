@@ -80,9 +80,15 @@ def find_wcnmax_extremum(mol: str, extraction_rows: list[dict]) -> dict | None:
         r_cur, w_cur, mo_cur, eps_cur = pts[i]
         _, w_next, _, _ = pts[i + 1]
         if (w_cur < w_prev and w_cur < w_next) or (w_cur > w_prev and w_cur > w_next):
+            # depth = how far w_cur sits below (positive) or above (negative) the
+            # midpoint of its two neighbors -- the yes/no extremum flag alone can't
+            # tell a barely-there wobble from a deep collapse (see mol_014_Z vs
+            # mol_029_Z: both flag "yes", but 014's dip is ~4x deeper).
+            depth = (w_prev + w_next) / 2 - w_cur
             return {
                 "R_star": r_cur, "w_star": w_cur, "MO_index": mo_cur,
                 "epsilon_i_star": float(eps_cur) if eps_cur not in (None, "", "None") else None,
+                "depth": depth,
             }
     return None
 
@@ -97,9 +103,11 @@ def main() -> None:
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
     per_mol_series = {}
+    extrema = {}
     for mol in mols:
         r_values, y_by_descriptor = load_series(mol, channel_rows)
         per_mol_series[mol] = (r_values, y_by_descriptor)
+        extrema[mol] = find_wcnmax_extremum(mol, extraction_rows)
 
     # ---- plots ----
     for descriptor in DESCRIPTORS:
@@ -128,6 +136,21 @@ def main() -> None:
                 mol_id, (xs[-1], ys[-1]), xytext=(6, 0), textcoords="offset points",
                 fontsize=8, color="dimgray", va="center",
             )
+            # Mark the detected interior extremum and label its depth -- the
+            # yes/no flag in the summary table hides how deep the dip actually is
+            # (mol_014_Z vs mol_029_Z: both "yes", but 014's dip is ~4x deeper),
+            # so surface it directly on the one plot where it's diagnostic.
+            if descriptor == "wcnmax" and extrema.get(mol) is not None:
+                ex = extrema[mol]
+                ax.scatter(
+                    [ex["R_star"]], [ex["w_star"]], marker="D", s=70,
+                    facecolors="none", edgecolors=color, linewidths=2, zorder=5,
+                )
+                ax.annotate(
+                    f"Δ={ex['depth']:.3f}", (ex["R_star"], ex["w_star"]),
+                    xytext=(0, -12), textcoords="offset points",
+                    fontsize=7.5, color="dimgray", ha="center", va="top",
+                )
         ax.set_xlabel("R(N-O)  (Å)")
         ax.set_ylabel(LABELS[descriptor])
         ax.set_title(f"{LABELS[descriptor]} vs. N-O distance")
@@ -140,21 +163,22 @@ def main() -> None:
 
     # ---- summary table ----
     lines = [
-        "| mol | exp | d(Ψ)/dR | d(log₁₀Λ)/dR | d(wCNmax)/dR | d(w17max)/dR | d(w78max)/dR | wCNmax extremum |",
-        "|---|---|---|---|---|---|---|---|",
+        "| mol | exp | d(Ψ)/dR | d(log₁₀Λ)/dR | d(wCNmax)/dR | d(w17max)/dR | d(w78max)/dR | wCNmax extremum | dip depth |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for mol in mols:
         mol_id = mol.split("_")[1]
         outcome = outcomes[f"mol_{mol_id}"]["exp_outcome"]
         slopes = slopes_rows[mol]
-        extremum_info = find_wcnmax_extremum(mol, extraction_rows)
+        extremum_info = extrema.get(mol)
         if extremum_info is None:
-            extremum = "no"
+            extremum, depth_str = "no", "n/a"
         else:
             extremum = (
                 f"yes @ R={extremum_info['R_star']:.4f} (MO {extremum_info['MO_index']}, "
                 f"epsilon={extremum_info['epsilon_i_star']:.4f} a.u.)"
             )
+            depth_str = f"{extremum_info['depth']:.4f}"
 
         def fmt(key):
             val = slopes.get(key)
@@ -162,7 +186,7 @@ def main() -> None:
 
         lines.append(
             f"| {mol} | {outcome} | {fmt('d_psi_dR')} | {fmt('d_log_lambda_dR')} | "
-            f"{fmt('d_wcnmax_dR')} | {fmt('d_w17max_dR')} | {fmt('d_w78max_dR')} | {extremum} |"
+            f"{fmt('d_wcnmax_dR')} | {fmt('d_w17max_dR')} | {fmt('d_w78max_dR')} | {extremum} | {depth_str} |"
         )
 
     table = "\n".join(lines)

@@ -19,12 +19,12 @@ from rdkit import Chem
 
 from beckmann.analysis.classical import get_oxime_atoms
 from beckmann.config import DATA_OUTPUT
-from beckmann.dft.inputs import TEST_IDS
+from beckmann.dft.inputs import TEST_IDS, resolve_mol_name
 from beckmann.dft.scan import oxime_atom_map_from_gjf
 
 BEST_PER_SUBSTRATE_SDF = DATA_OUTPUT / "aimnet_optimized" / "best_per_substrate.sdf"
 
-PSI_EPSILON = 1e-6  # unspecified in the paper/handouts -- only matters when K_frag ~ 0
+PSI_EPSILON = 1e-6  # unspecified in the paper/handouts only matters when K_frag ~ 0
 
 _MOL_CACHE: dict[str, Chem.Mol] = {}
 
@@ -76,14 +76,14 @@ def _label_has_atom(label: str, num: int) -> bool:
 
 
 # Stages used for the 5-point R(N-O) series: 'nbo' and 'scan_1' are the same R0
-# geometry (see parse_nbo.py/parse_cmo.py docstrings) -- use 'nbo' for R0 and skip
+# geometry (see parse_nbo.py/parse_cmo.py docstrings) use 'nbo' for R0 and skip
 # 'scan_1' so the least-squares fit doesn't double-count one point.
 SERIES_STAGES = ["nbo", "sp2", "sp3", "sp4", "scan_2"]
 
 # When the in-scan point 5 never converged, 'sp5' is a standalone restart that
 # replaces 'scan_2' in the series (see JOB_ISSUES.md, mol_020_E). sp5.log has
-# two NBO/CMO tables at the same R -- the pre-optimization seed geometry and
-# the post-optimization converged one -- so it gets split into 'sp5_1'/'sp5_2'
+# two NBO/CMO tables at the same R the pre-optimization seed geometry and
+# the post-optimization converged one so it gets split into 'sp5_1'/'sp5_2'
 # by the same same-R disambiguation parse_nbo/parse_cmo use for _scan.log.
 # 'sp5_2' (parsed second, i.e. after optimization) is the converged, trustworthy
 # one; 'sp5_1' is the unrelaxed seed and must not be used.
@@ -191,11 +191,11 @@ def main() -> None:
     all_channel_rows = []
     all_slopes = []
     for mol_id in sorted(TEST_IDS):
-        mol     = f"mol_{mol_id.zfill(3)}_E"
-        mol_dir = dft_opt_dir / mol
-        if not mol_dir.exists():
-            print(f"-- {mol}: no directory, skipping")
+        mol = resolve_mol_name(mol_id, dft_opt_dir)
+        if mol is None:
+            print(f"-- mol_{mol_id.zfill(3)}: no directory, skipping")
             continue
+        mol_dir = dft_opt_dir / mol
         channel_rows = build_channel_descriptors(mol, mol_dir, e2pert_rows, cmo_rows)
         if not channel_rows:
             # Upstream parse_nbo/parse_cmo excluded this molecule entirely (e.g. a

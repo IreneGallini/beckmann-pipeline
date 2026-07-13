@@ -18,7 +18,7 @@ from beckmann.config import (
     FUNCTIONAL, BASIS, NPROC, MEM_GB, CHARGE, MULTIPLICITY,
     NBO_KEYWORDS, SOLVENT,
 )
-from beckmann.dft.inputs import TEST_IDS
+from beckmann.dft.inputs import TEST_IDS, resolve_mol_name
 
 OXIME_LABEL_RE = re.compile(r"\[oxime:\s*C(\d+)=N(\d+)-O(\d+)\]")
 
@@ -184,12 +184,13 @@ def main() -> None:
     else:
         mol_ids = sorted(TEST_IDS)
 
+    dft_opt_dir = DATA_OUTPUT / "dft_opt"
     for mol_id in mol_ids:
-        mol_dir = DATA_OUTPUT / "dft_opt" / f"mol_{mol_id.zfill(3)}_E"
-        if not mol_dir.exists():
-            print(f"-- mol_{mol_id.zfill(3)}_E: no directory, skipping")
+        mol = resolve_mol_name(mol_id, dft_opt_dir)
+        if mol is None:
+            print(f"-- mol_{mol_id.zfill(3)}: no directory, skipping")
             continue
-        mol = mol_dir.name
+        mol_dir = dft_opt_dir / mol
         scan_log = mol_dir / f"{mol}_scan.log"
         sp2_gjf  = mol_dir / f"{mol}_sp2.gjf"
         if not scan_log.exists():

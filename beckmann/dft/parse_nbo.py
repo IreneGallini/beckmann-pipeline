@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 
 from beckmann.config import DATA_OUTPUT
-from beckmann.dft.inputs import TEST_IDS
+from beckmann.dft.inputs import TEST_IDS, resolve_mol_name
 from beckmann.dft.scan import no_distance, oxime_indices_from_gjf, parse_standard_orientations
 
 TABLE_HEADER = "second order perturbation theory analysis"
@@ -27,7 +27,7 @@ NORMAL_TERMINATION = "Normal termination of Gaussian 16"
 def log_terminated_normally(log_path: Path) -> bool:
     """True if the log's final non-blank line reports normal termination.
 
-    A crashed/non-converged job (e.g. mol_020_E's Stage 3 scan -- see
+    A crashed/non-converged job (e.g. mol_020_E's Stage 3 scan see
     JOB_ISSUES.md) can still print complete-looking NBO/E2PERT tables upstream
     of the crash; that data is computed on a geometry that never converged and
     must not be trusted just because it parses cleanly.
@@ -122,7 +122,7 @@ def collect_molecule(mol: str, mol_dir: Path) -> list[dict]:
     """Parse all available stage logs for one molecule, e.g. 'mol_002_E'.
 
     If any present stage log didn't reach Normal termination, the whole molecule
-    is skipped rather than partially included -- a partial series (missing the
+    is skipped rather than partially included a partial series (missing the
     failed stage) isn't comparable to the other molecules' full 5-point series,
     and matches how mol_020_E was previously excluded by hand (see JOB_ISSUES.md).
     """
@@ -157,7 +157,7 @@ def collect_molecule(mol: str, mol_dir: Path) -> list[dict]:
         for row in parse_log(log_path, ni, oi):
             table_rows_by_r.setdefault(row["r_no"], []).append(row)
 
-        # _scan.log has two tables (start/end of scan) — disambiguate by order.
+        # _scan.log has two tables (start/end of scan) disambiguate by order.
         for point, (r_no, rows) in enumerate(sorted(
             table_rows_by_r.items(), key=lambda kv: (kv[0] is None, kv[0])
         ), start=1):
@@ -175,11 +175,11 @@ def main() -> None:
 
     all_rows = []
     for mol_id in sorted(TEST_IDS):
-        mol     = f"mol_{mol_id.zfill(3)}_E"
-        mol_dir = dft_opt_dir / mol
-        if not mol_dir.exists():
-            print(f"-- {mol}: no directory, skipping")
+        mol = resolve_mol_name(mol_id, dft_opt_dir)
+        if mol is None:
+            print(f"-- mol_{mol_id.zfill(3)}: no directory, skipping")
             continue
+        mol_dir = dft_opt_dir / mol
         rows = collect_molecule(mol, mol_dir)
         print(f"-- {mol}: {len(rows)} E2PERT rows")
         all_rows.extend(rows)

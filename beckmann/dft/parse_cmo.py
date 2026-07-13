@@ -23,7 +23,7 @@ Rearrangement" (Sections 2.2-2.4). See Notes.md for the full derivation.
   window. For mol_006_E/mol_021_E, BD*(C{ci}-C{c_aryl}) is a real NBO (confirmed
   in the NBOSUM table, occupancy ~0.032) that mixes strongly (25-38% coefficient,
   well above any print threshold) into virtual MOs sitting at LUMO+0.48 to
-  LUMO+0.60 a.u. -- just past the old cutoff. That's not print-threshold noise,
+  LUMO+0.60 a.u. just past the old cutoff. That's not print-threshold noise,
   it's the antibond's character showing up in a higher-lying virtual MO than the
   paper's nominal window assumed, consistent with the project's own CN-handoff /
   avoided-crossing hypothesis (frontier character migrating between canonical
@@ -37,11 +37,11 @@ Rearrangement" (Sections 2.2-2.4). See Notes.md for the full derivation.
 c_aryl/c_alkyl come from beckmann.dft.descriptors.get_substituent_map() (fresh
 RDKit aromaticity check, not any pre-computed CSV).
 
-One row per (mol, stage, r_no) -- same grain as nbo_e2pert.csv.
+One row per (mol, stage, r_no) same grain as nbo_e2pert.csv.
 Output: data/output/analysis/cmo_descriptors.csv (summary: w17max/w78max/wcnmax/Lambda)
         data/output/analysis/cmo_channel_extraction.csv (per-channel detail: which MO
         carried the max weight at each geometry, its orbital energy, and the raw signed
-        coefficient before squaring -- the wX^max summary columns above are a max over
+        coefficient before squaring the wX^max summary columns above are a max over
         this data, but which MO achieves it can shift identity between scan points
         (canonical MOs are energy-ordered and can change character along the scan), so
         that intermediate detail is kept here rather than discarded. This is what a
@@ -56,7 +56,7 @@ from pathlib import Path
 
 from beckmann.config import DATA_OUTPUT
 from beckmann.dft.descriptors import get_substituent_map
-from beckmann.dft.inputs import TEST_IDS
+from beckmann.dft.inputs import TEST_IDS, resolve_mol_name
 from beckmann.dft.parse_nbo import STAGES, log_terminated_normally, r_no_before
 from beckmann.dft.scan import oxime_atom_map_from_gjf
 
@@ -184,7 +184,7 @@ def compute_channel_weights(
 
 
 def compute_descriptors(mo_table: list[dict], ci: int, ni: int, c_aryl: int, c_alkyl: int) -> tuple[dict, dict]:
-    """Returns (summary_dict, channels) -- channels is the raw per-channel detail
+    """Returns (summary_dict, channels) channels is the raw per-channel detail
     (weight, mo_index, epsilon_i_star, coefficient) that the summary's wX^max/wX^max_mo
     columns are themselves derived from, kept around for the extraction table."""
     window  = virtual_window(mo_table)
@@ -258,7 +258,7 @@ def collect_molecule(mol: str, mol_dir: Path, c_aryl: int, c_alkyl: int) -> tupl
     energy, and the signed coefficient before squaring.
 
     If any present stage log didn't reach Normal termination, the whole molecule is
-    skipped rather than partially included -- see parse_nbo.collect_molecule for why
+    skipped rather than partially included see parse_nbo.collect_molecule for why
     (matches mol_020_E's prior manual exclusion, see JOB_ISSUES.md).
     """
     ci, ni, oi, _ = oxime_atom_map_from_gjf(mol_dir / f"{mol}_opt.gjf")
@@ -315,11 +315,11 @@ def main() -> None:
     all_rows = []
     all_channel_rows = []
     for mol_id in sorted(TEST_IDS):
-        mol     = f"mol_{mol_id.zfill(3)}_E"
-        mol_dir = dft_opt_dir / mol
-        if not mol_dir.exists():
-            print(f"-- {mol}: no directory, skipping")
+        mol = resolve_mol_name(mol_id, dft_opt_dir)
+        if mol is None:
+            print(f"-- mol_{mol_id.zfill(3)}: no directory, skipping")
             continue
+        mol_dir = dft_opt_dir / mol
         subst = get_substituent_map(mol, mol_dir)
         rows, channel_rows = collect_molecule(mol, mol_dir, subst["c_aryl"], subst["c_alkyl"])
         print(f"-- {mol} (aryl=C{subst['c_aryl']}, alkyl=C{subst['c_alkyl']}): {len(rows)} stage points")
