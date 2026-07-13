@@ -339,6 +339,77 @@ requested from Tetiana.
 
 ---
 
+## Open issue: the wCNmax "extremum" test conflates two different mechanisms (not yet implemented)
+
+`find_wcnmax_extremum()` in `scripts/analysis/summarize_descriptors.py` (called from
+`main()`, feeds the `descriptor_summary.md` table) currently flags a "handoff" purely by
+shape: is an interior point of the 5-point wCNmax(R) series a strict local min/max of its
+two neighbors? A `depth` column was added later to distinguish a deep dip from a shallow
+wobble, but depth alone still doesn't explain *why* a dip happens.
+
+**Manually tracing every virtual MO that contributes to the target `BD*(C{ci}-N{ni})`
+antibond (not just the single winning wcnmax MO) across all 6 test molecules
+(mol_002/006/014/020/021/029)** shows the MO carrying `wcnmax` always switches identity
+at the same scan step (between R0+0.1 and R0+0.2), but two genuinely different things can
+happen there:
+
+- **Real near-degenerate mixing** — the outgoing and incoming MOs are *both* printed
+  simultaneously in the CMO table at that one geometry (i.e. both still clear NBO's 5%
+  print threshold), with a small energy gap between them, and their combined weight is
+  roughly conserved (character splits across two orbitals rather than vanishing):
+  - `mol_014_Z` (exp = **F**): MO44 (weight 0.0625) + MO45 (weight 0.3612) at R0+0.2,
+    ΔE = 0.0088 a.u. — total ≈ 0.42, matching the single-orbital value on either side.
+  - `mol_020_E` (exp = **R**): MO48 (weight 0.0538) + MO49 (weight 0.4058) at R0+0.2,
+    ΔE = 0.0181 a.u.
+  This is what a textbook avoided crossing looks like.
+- **A clean relay, no coexistence** — the outgoing MO has already dropped below the 5%
+  print threshold by the next geometry, so only the incoming MO is ever visible in the
+  table:
+  - `mol_002_E` (F) and `mol_006_E` (R): clean relay with **no dip at all** — the
+    coefficient magnitude barely changes across the switch (e.g. 002: 0.662 → 0.663;
+    006: 0.653 → 0.654), so the scalar max glides through smoothly.
+  - `mol_021_E` (R) and `mol_029_E` (R): also a clean relay (no coexisting second MO
+    found), but with a small dip anyway (depth 0.016 / 0.010) — likely just numerical
+    wobble in exactly where the crossover geometry lands, not a physical mixing event.
+
+The current yes/no (or yes/no + depth) test cannot tell a real avoided crossing apart from
+a numerical wobble in a clean relay — both get flagged "yes". And **checked against
+experimental outcome, neither version cleanly separates R from F on this 6-molecule set
+either way**: real near-degenerate mixing occurs in mol_014_Z (F) *and* mol_020_E (R)
+alike; the shallow wobble occurs in two R's (021, 029); no handoff at all occurs in one F
+(002) and one R (006). This isn't presented as a fix that will crack R/F prediction — it's
+a more mechanistically honest descriptor to bring to the supervisor than the current
+scalar-dip proxy.
+
+**Proposed approach (not implemented yet):**
+
+1. In `beckmann/dft/parse_cmo.py`, generalize `max_weight_for_target()` (currently
+   returns only the single best-matching MO) to expose the full sorted list of matches, so
+   the runner-up MO is available, not just the winner. Keep `max_weight_for_target()`'s own
+   return value byte-identical (it's just `matches[0]`) so `wX^max`/`Lambda`/`Psi` are
+   unaffected.
+2. Add `second_MO_index`, `second_epsilon_i_star`, `second_coefficient`, `second_weight`,
+   and `mo_gap` (= `abs(epsilon - second_epsilon)`) columns to
+   `cmo_channel_extraction.csv` (`EXTRACTION_FIELDS`), populated from the second-best match
+   per `(mol, stage, channel)`.
+3. In `summarize_descriptors.py`, add a `classify_handoff()` next to
+   `find_wcnmax_extremum()`: find the scan step where `MO_index` changes; if the *previous*
+   stage's `MO_index` shows up as `second_MO_index` at that step with a small `mo_gap`
+   (empirically < 0.03 a.u. cleanly separates the two confirmed real cases, 0.0088/0.0181,
+   from the two wobble cases, which have no coexisting second MO at all) → label
+   `"near-degenerate mixing"`; else if `MO_index` changes at all → `"clean handoff"`; else
+   → `"no handoff"`. Add this as a new column in `descriptor_summary.md`, additive to the
+   existing extremum/depth columns.
+4. Regenerate via `python scripts/dft/parse_cmo.py` then
+   `python scripts/analysis/summarize_descriptors.py`, and check the result against the
+   hand-derived answers above before trusting it on future substrates.
+
+No test currently covers `parse_cmo.py` at all (`tests/test_descriptors.py` only covers
+`get_substituent_map`/`least_squares_slope`) — add one for the second-match/gap extraction
+when this is implemented.
+
+---
+
 ## Implement Orbital Resolved Electron Routing Framework
 
 *(Original task prompt, kept for history. The prose descriptions of Λ/Ψ/wCNmax below
