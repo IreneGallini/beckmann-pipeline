@@ -19,7 +19,7 @@ from beckmann.dft.inputs import TEST_IDS
 from beckmann.dft.scan import no_distance, oxime_indices_from_gjf, parse_standard_orientations
 
 TABLE_HEADER = "second order perturbation theory analysis"
-STAGES       = ["nbo", "scan", "sp2", "sp3", "sp4"]
+STAGES       = ["nbo", "scan", "sp2", "sp3", "sp4", "sp5"]
 
 NORMAL_TERMINATION = "Normal termination of Gaussian 16"
 
@@ -128,8 +128,19 @@ def collect_molecule(mol: str, mol_dir: Path) -> list[dict]:
     """
     ni, oi, _ = oxime_indices_from_gjf(mol_dir / f"{mol}_opt.gjf")
 
+    # sp5.log is a standalone restart of the scan's final point, used when the
+    # in-scan geometry never converged (see JOB_ISSUES.md, mol_020_E). When it's
+    # present and clean, it supersedes _scan.log entirely -- scan's point 1
+    # duplicates 'nbo' (same R0) and point 5 is exactly what sp5 replaces -- so
+    # _scan.log is dropped as a source rather than required to have terminated
+    # normally.
+    stages = STAGES
+    sp5_log = mol_dir / f"{mol}_sp5.log"
+    if sp5_log.exists() and log_terminated_normally(sp5_log):
+        stages = [s for s in STAGES if s != "scan"]
+
     bad_logs = [
-        p.name for stage in STAGES
+        p.name for stage in stages
         if (p := mol_dir / f"{mol}_{stage}.log").exists() and not log_terminated_normally(p)
     ]
     if bad_logs:
@@ -138,7 +149,7 @@ def collect_molecule(mol: str, mol_dir: Path) -> list[dict]:
         return []
 
     all_rows = []
-    for stage in STAGES:
+    for stage in stages:
         log_path = mol_dir / f"{mol}_{stage}.log"
         if not log_path.exists():
             continue

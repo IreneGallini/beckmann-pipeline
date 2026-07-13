@@ -263,8 +263,15 @@ def collect_molecule(mol: str, mol_dir: Path, c_aryl: int, c_alkyl: int) -> tupl
     """
     ci, ni, oi, _ = oxime_atom_map_from_gjf(mol_dir / f"{mol}_opt.gjf")
 
+    # sp5.log supersedes _scan.log when present and clean -- see the matching
+    # comment in parse_nbo.collect_molecule (JOB_ISSUES.md, mol_020_E).
+    stages = STAGES
+    sp5_log = mol_dir / f"{mol}_sp5.log"
+    if sp5_log.exists() and log_terminated_normally(sp5_log):
+        stages = [s for s in STAGES if s != "scan"]
+
     bad_logs = [
-        p.name for stage in STAGES
+        p.name for stage in stages
         if (p := mol_dir / f"{mol}_{stage}.log").exists() and not log_terminated_normally(p)
     ]
     if bad_logs:
@@ -274,7 +281,7 @@ def collect_molecule(mol: str, mol_dir: Path, c_aryl: int, c_alkyl: int) -> tupl
 
     summary_rows = []
     channel_rows = []
-    for stage in STAGES:
+    for stage in stages:
         log_path = mol_dir / f"{mol}_{stage}.log"
         if not log_path.exists():
             continue

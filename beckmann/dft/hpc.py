@@ -203,7 +203,7 @@ def cmd_submit_scan_sp(config: dict, dry_run: bool, mol: str | None, local_dir: 
         f'cd {remote_dir} && '
         f'for dir in {pattern}/; do '
         '  name="${dir%/}"; '
-        f'  for sp in 2 3 4; do '
+        f'  for sp in 2 3 4 5; do '
         f'    gjf="${{name}}_sp${{sp}}.gjf"; '
         f'    [ -f "$dir/$gjf" ] && (cd "$dir" && nohup {g16} < "$gjf" > "${{gjf%.gjf}}.log" 2>&1 &); '
         '  done; '

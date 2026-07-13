@@ -82,6 +82,41 @@ in `beckmann/config.py`, committed 2026-07-09).
    fixed (they currently only cover mol_002/006/021 — mol_020 rows were
    manually stripped from every output CSV on 2026-07-10).
 
+**Resolution (2026-07-13):** Executed steps 1-2 with a lighter route line than
+step 3 proposed — `opt=(ModRedundant,CalcFC,MaxCycles=300)` (no `NoGDIIS`, no
+`MaxStep=3`) — as `mol_020_E_sp5.gjf`. Starting geometry: point 4's converged
+Cartesian block from `mol_020_E_scan.log`, with the leaving group
+(`O13`, `H26`, `H27` — the only atoms bonded to `O13` besides `N12`, per the
+scan log's `$CHOOSE` block) rigidly translated +0.1 Å along the N12→O13 unit
+vector to seed R(N-O) = 1.9029 Å, then `B 12 13 F` to hold that bond fixed
+while everything else relaxes. Converged in 58 minutes (`Optimization
+completed` / `Stationary point found`), clean NBO7 (98.01% Lewis structure,
+no low-occupancy warnings) — `CalcFC` + a good initial guess was enough on its
+own; didn't need step 4's dihedral-freeze fallback.
+
+**Second issue found during recovery:** `mol_020_E_sp2/sp3/sp4.log` (dated
+2026-07-07) turned out to be stale — their own title lines report R(N-O) =
+1.7259/1.8259/1.9259 Å (a R0'=1.6259 Å baseline), not the 1.6029/1.7029/1.8029
+Å expected from the current scan's R0 = 1.5029 Å. Stage 1 (`_opt.gjf`) must
+have been re-optimized to a different converged geometry after these sp2-4
+jobs were originally extracted, silently orphaning them — mixing them with
+the current `nbo`/`scan`/`sp5` data would have spliced two different geometry
+series into one non-monotonic "R(N-O) scan". Fixed by re-running
+`scripts/dft/extract_scan_sp.py --mol 020` against the current
+`mol_020_E_scan.log` (correctly reproduced R = 1.6029/1.7029/1.8029 Å) and
+resubmitting just those three single-point jobs — sp5 was left alone since it
+was already good. **Lesson: if a molecule's Stage 1 is ever re-run, its
+sp2/sp3/sp4 (and any restart-point jobs like sp5) must be regenerated too —
+nothing currently checks that they came from the same `_opt.chk` lineage.**
+
+Pipeline code changes (`beckmann/dft/parse_nbo.py`, `parse_cmo.py`,
+`descriptors.py`): added `sp5` as a recognized stage that supersedes
+`_scan.log` entirely when present and clean (scan's point 1 duplicates `nbo`,
+point 5 is what sp5 replaces) — `_scan.log` is no longer required to reach
+Normal termination for a molecule that has a working `sp5.log`.
+`SERIES_STAGES`/`SERIES_FALLBACK` in `descriptors.py` swap in `sp5` for
+`scan_2` in the 5-point d/dR series when `scan_2` isn't available.
+
 ---
 
 ## General playbook: crashed or non-converging Gaussian jobs

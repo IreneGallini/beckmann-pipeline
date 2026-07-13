@@ -80,6 +80,15 @@ def _label_has_atom(label: str, num: int) -> bool:
 # 'scan_1' so the least-squares fit doesn't double-count one point.
 SERIES_STAGES = ["nbo", "sp2", "sp3", "sp4", "scan_2"]
 
+# When the in-scan point 5 never converged, 'sp5' is a standalone restart that
+# replaces 'scan_2' in the series (see JOB_ISSUES.md, mol_020_E). sp5.log has
+# two NBO/CMO tables at the same R -- the pre-optimization seed geometry and
+# the post-optimization converged one -- so it gets split into 'sp5_1'/'sp5_2'
+# by the same same-R disambiguation parse_nbo/parse_cmo use for _scan.log.
+# 'sp5_2' (parsed second, i.e. after optimization) is the converged, trustworthy
+# one; 'sp5_1' is the unrelaxed seed and must not be used.
+SERIES_FALLBACK = {"scan_2": "sp5_2"}
+
 
 def compute_psi_row(e2pert_rows: list[dict], ci: int, ni: int, oi: int, c_aryl: int, c_alkyl: int) -> dict:
     """K_anti, K_frag, Psi for one (mol, stage) point's E2PERT rows."""
@@ -148,7 +157,11 @@ def build_channel_descriptors(mol: str, mol_dir: Path, e2pert_rows: list[dict], 
 def compute_slopes(mol: str, channel_rows: list[dict]) -> dict:
     """d/dR for psi, log_lambda, wcnmax, w17max, w78max over the 5-point series."""
     by_stage = {row["stage"]: row for row in channel_rows if row["mol"] == mol}
-    series = [by_stage[s] for s in SERIES_STAGES if s in by_stage]
+    series = []
+    for s in SERIES_STAGES:
+        key = s if s in by_stage else SERIES_FALLBACK.get(s)
+        if key in by_stage:
+            series.append(by_stage[key])
     r_values = [float(row["r_no"]) for row in series]
 
     slopes = {"mol": mol, "n_points": len(series), "r_values": r_values}
