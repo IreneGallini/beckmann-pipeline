@@ -9,7 +9,6 @@ converged geometries at R0+0.1, R0+0.2, R0+0.3 and creates three single-point
 Output: data/output/dft_opt/{mol}/{mol}_sp{N}.gjf  (N = 2, 3, 4)
 """
 import argparse
-import math
 import re
 from pathlib import Path
 
@@ -18,44 +17,13 @@ from beckmann.config import (
     FUNCTIONAL, BASIS, NPROC, MEM_GB, CHARGE, MULTIPLICITY,
     NBO_KEYWORDS, SOLVENT,
 )
+from beckmann.dft.geometry import (
+    ATOMIC_SYMBOLS, displace_leaving_group, find_leaving_group,
+    no_distance, parse_standard_orientations,
+)
 from beckmann.dft.inputs import TEST_IDS, resolve_mol_name
 
 OXIME_LABEL_RE = re.compile(r"\[oxime:\s*C(\d+)=N(\d+)-O(\d+)\]")
-
-ATOMIC_SYMBOLS = {
-    1: "H",  6: "C",  7: "N",  8: "O",  9: "F",
-    16: "S", 17: "Cl", 35: "Br",
-}
-
-
-def parse_standard_orientations(lines: list[str]) -> list[tuple[int, list]]:
-    """Return [(header_line_idx, atoms)] for every Standard orientation block."""
-    blocks = []
-    i = 0
-    while i < len(lines):
-        if "Standard orientation:" in lines[i]:
-            j = i + 5
-            atoms = []
-            while j < len(lines) and "---" not in lines[j]:
-                parts = lines[j].split()
-                if len(parts) == 6:
-                    atomic_num = int(parts[1])
-                    x, y, z = float(parts[3]), float(parts[4]), float(parts[5])
-                    sym = ATOMIC_SYMBOLS.get(atomic_num, f"X{atomic_num}")
-                    atoms.append((sym, x, y, z))
-                j += 1
-            if atoms:
-                blocks.append((i, atoms))
-            i = j
-        else:
-            i += 1
-    return blocks
-
-
-def no_distance(atoms: list, i: int, j: int) -> float:
-    """Euclidean distance between 1-based atom indices i and j."""
-    a, b = atoms[i - 1], atoms[j - 1]
-    return math.sqrt((a[1]-b[1])**2 + (a[2]-b[2])**2 + (a[3]-b[3])**2)
 
 
 def gjf_sp(job_name: str, atoms: list, oxime_label: str, r_no: float) -> str:

@@ -17,6 +17,7 @@ from beckmann.config import (
     FUNCTIONAL, BASIS, NPROC, MEM_GB, CHARGE, MULTIPLICITY,
     NBO_KEYWORDS, SOLVENT,
 )
+from beckmann.dft.geometry import displace_leaving_group
 
 TEST_IDS  = {"002", "006", "020", "021", "014", "029"}
 OXIME_PAT = Chem.MolFromSmarts('[C:1]=[N:2]-[O+:3]')
@@ -92,6 +93,62 @@ def _scan_gjf(name: str, ni: int, oi: int, oxime_label: str) -> str:
         f"$NBO {NBO_KEYWORDS} $END\n"
         f"\n\n"
     )
+
+
+def _scan_gjf_rigid(name: str, base_atoms: list, ni: int, oi: int, oxime_label: str) -> str:
+    """Stage 3 (rigid-scan architecture): 4 independent points (R0+0.1 .. R0+0.4),
+    each built from the SAME Stage-1 base geometry -- not chained point-to-point,
+    not extracted from an internal Gaussian scan walk. Per point: a rigid O-N
+    displacement (pure geometry, via displace_leaving_group), then a constrained
+    optimization (opt=ModRedundant, bond frozen at the new length, everything
+    else relaxes), then a same-checkpoint Link1 continuation into a full
+    NBO7/CMO single point. Matches the supervisor's reference file
+    (oxime_001_scan.gjf) -- see JOB_ISSUES.md for the full rationale.
+
+    NBO keywords deliberately omit her NBOMO=P120 print-window restriction:
+    parse_cmo.py was fixed earlier to search the entire virtual manifold
+    unconditionally (see its docstring) after discovering real target
+    antibonds mixing in above a narrower window for some substrates -- a
+    fixed narrow NBOMO range would reintroduce that at the Gaussian-printing
+    level, upstream of anything the parser can recover.
+    """
+    blocks = []
+    for pt in range(1, 5):
+        delta = pt * 0.1
+        displaced = displace_leaving_group(base_atoms, ni, oi, delta)
+        coord_block = "\n".join(
+            f"{sym:<3}  {x:>14.8f}  {y:>14.8f}  {z:>14.8f}" for sym, x, y, z in displaced
+        )
+        chk = f"{name}_scan_pt{pt}.chk"
+        # No %oldchk -- literal coordinates are given directly below (not
+        # geom=check), so there's nothing to copy from another checkpoint,
+        # matching the reference file (oxime_001_scan.gjf never uses %oldchk).
+        blocks.append(
+            f"%chk={chk}\n"
+            f"%nprocshared={NPROC}\n"
+            f"%mem={MEM_GB}GB\n"
+            f"#p {FUNCTIONAL}/{BASIS} opt=(ModRedundant) SCF=(Tight,XQC) NoSymm {SOLVENT}\n"
+            f"\n"
+            f"{name} scan pt{pt} (R0+{delta:.1f}A) rigid O-N displacement then constrained opt  {oxime_label}\n"
+            f"\n"
+            f"{CHARGE} {MULTIPLICITY}\n"
+            f"{coord_block}\n"
+            f"\n"
+            f"B {ni} {oi} F\n"
+        )
+        blocks.append(
+            f"%chk={chk}\n"
+            f"%nprocshared={NPROC}\n"
+            f"%mem={MEM_GB}GB\n"
+            f"#p {FUNCTIONAL}/{BASIS} Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current {SOLVENT}\n"
+            f"\n"
+            f"{name} SP+NBO7/CMO after constrained opt at R0+{delta:.1f}A  {oxime_label}\n"
+            f"\n"
+            f"{CHARGE} {MULTIPLICITY}\n"
+            f"\n"
+            f"$NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END\n"
+        )
+    return "\n--Link1--\n".join(blocks) + "\n\n"
 
 
 def prepare_opt(
