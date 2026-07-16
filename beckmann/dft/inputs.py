@@ -101,7 +101,7 @@ def _scan_gjf(name: str, ni: int, oi: int, oxime_label: str) -> str:
 
 def _scan_gjf_rigid(
     name: str, base_atoms: list, ni: int, oi: int, oxime_label: str,
-    basis: str = BASIS, step: float = 0.1, n_points: int = 4,
+    basis: str = BASIS, step: float = 0.05, n_points: int = 6,
 ) -> str:
     """Stage 3 (rigid-scan architecture): n_points independent points
     (R0+step .. R0+step*n_points), each built from the SAME Stage-1 base
@@ -113,12 +113,18 @@ def _scan_gjf_rigid(
     NBO7/CMO single point. Matches the supervisor's reference file
     (oxime_001_scan.gjf) -- see JOB_ISSUES.md for the full rationale.
 
-    Defaults (step=0.1, n_points=4) match the standard 5-point series (with
-    R0 covered separately by Stage 2). A finer step/more points covers the
-    same R0..R0+0.4 A range at higher resolution -- e.g. mol_006_E's
-    supervisor-requested 0.05 A / 8-point rerun, to check whether a narrow
-    interior wCNmax minimum was being stepped over by the coarser default
-    grid (see JOB_ISSUES.md).
+    Defaults (step=0.05, n_points=6) give the standard 7-point series
+    (R0..R0+0.30 A, R0 covered separately by Stage 2). This replaced an
+    earlier (step=0.1, n_points=4)/R0..R0+0.4 A default after mol_006_E's
+    finer 0.05 A rerun showed the coarser 0.1 A grid can step directly over
+    a real, sharp interior wCNmax minimum (see Notes.md). The range is
+    truncated at R0+0.30 A rather than extended to R0+0.4 A for two
+    reasons: mol_006_E's real minimum landed well inside R0+0.30 A, and the
+    far end of the range (R0+0.35/+0.4 A) has repeatedly been the least
+    stable part of the scan -- JOB_ISSUES.md documents a genuine
+    non-converging double-well oscillation at R0+0.4 A for mol_020_E and
+    outright crashes/noisy convergence at R0+0.4 A for mol_006_E under two
+    earlier architectures.
 
     NBO keywords deliberately omit her NBOMO=P120 print-window restriction:
     parse_cmo.py was fixed earlier to search the entire virtual manifold
@@ -227,17 +233,16 @@ def main_opt() -> None:
 
 
 def prepare_scan_rigid(mol_dir: Path, name: str, basis: str = BASIS,
-                        step: float = 0.1, n_points: int = 4) -> Path:
+                        step: float = 0.05, n_points: int = 6) -> Path:
     """Stage 3 (rigid-scan architecture) generation, run as a separate step
     AFTER Stage 1 (_opt.gjf) has completed on Citadel and its .log has been
     downloaded to mol_dir -- see prepare_opt()'s docstring for why this can't
     happen upfront like Stages 1-2. Reads the converged geometry from
     {name}_opt.log and writes {name}_scan.gjf via _scan_gjf_rigid().
 
-    step/n_points default to the standard 4-point/0.1 A series; pass a finer
-    step for a higher-resolution scan (e.g. step=0.05, n_points=8, as used
-    for mol_006_E after its standard-resolution scan missed a real interior
-    wCNmax minimum -- see Notes.md)."""
+    step/n_points default to the standard 6-point/0.05 A series (R0..R0+0.30 A)
+    -- see _scan_gjf_rigid()'s docstring for the full rationale (mol_006_E's
+    missed interior minimum + convergence risk at R0+0.35/+0.4 A)."""
     # Local imports: beckmann.dft.scan imports TEST_IDS/resolve_mol_name from
     # this module at top level, so importing it back at module scope here
     # would be circular (same reason geometry.py was split out).

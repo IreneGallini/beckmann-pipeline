@@ -465,6 +465,12 @@ The supervisor's reference paper reports an interior wCNmax minimum for this com
    (The R0 geometry/bond-length discrepancy itself is still unexplained, separately from
    the missing-minimum question — see `RIGID_SCAN_MIGRATION.md` for the raw numbers if
    this needs revisiting.)
+
+   **For clarity going forward: our official basis is, and remains, `wB97XD/6-311+G(d,p)`
+   for every job.** The `6-31G(d)` run above (`data/output/dft_opt_631g/`) was a one-off
+   test, not an alternative default — it's abandoned, not part of the active pipeline.
+   The supervisor's own paper uses a separate, higher-accuracy basis than either of these;
+   that's a different reference point, not something we're matching.
 6. **Scan resolution** — confirmed. The supervisor suggested keeping our basis but scanning
    at 0.05 Å steps instead of 0.1 Å (doubling the point density over the same R0 to
    R0+0.4 Å range: 9 points total including R0, vs. 5). Ran via

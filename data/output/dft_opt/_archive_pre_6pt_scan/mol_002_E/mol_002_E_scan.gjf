@@ -1,58 +1,9 @@
-%chk=mol_002_E_scan_pt1.chk
+%chk=mol_002_E_rigidscan_scan_pt1.chk
 %nprocshared=8
 %mem=16GB
 #p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
-mol_002_E scan pt1 (R0+0.05A) rigid O-N displacement then constrained opt  [oxime: C11=N12-O13]
-
-1 1
-C       -4.32213000      0.60863700     -0.03140800
-O       -3.52051600     -0.57075000      0.00040400
-C       -2.17674900     -0.43465600      0.00779600
-C       -1.45347000     -1.64481400      0.02123000
-C       -0.07860300     -1.63398300      0.02384800
-C        0.58189600     -0.39815700      0.01538500
-C       -0.13314400      0.79851800      0.00796800
-C       -1.52253500      0.79590300      0.00315800
-C        0.77951800      1.99165600     -0.00039700
-C        2.19843300      1.39431200      0.01915900
-C        2.00119500     -0.09475800      0.00097400
-N        2.87411300     -1.03596800     -0.02926400
-O        4.27571849     -0.35329877     -0.05027479
-H       -5.35383200      0.26326700     -0.04132300
-H       -4.12075400      1.19061500     -0.93456800
-H       -4.14845700      1.22141500      0.85690500
-H       -2.00554300     -2.57692400      0.02780200
-H        0.47473200     -2.56537500      0.03279800
-H       -2.06863200      1.72993200     -0.00525400
-H        0.61265100      2.59915700     -0.89235400
-H        0.59664900      2.62886900      0.86696600
-H        2.75898400      1.67190700      0.91451700
-H        2.79770600      1.69262600     -0.84292900
-H        4.66312249     -0.39647877      0.84503921
-H        4.83596249     -0.89186177     -0.63680579
-
-B 12 13 F
-
---Link1--
-%chk=mol_002_E_scan_pt1.chk
-%nprocshared=8
-%mem=16GB
-#p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
-
-mol_002_E SP+NBO7/CMO after constrained opt at R0+0.05A  [oxime: C11=N12-O13]
-
-1 1
-
-$NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
-
---Link1--
-%chk=mol_002_E_scan_pt2.chk
-%nprocshared=8
-%mem=16GB
-#p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
-
-mol_002_E scan pt2 (R0+0.10A) rigid O-N displacement then constrained opt  [oxime: C11=N12-O13]
+mol_002_E_rigidscan scan pt1 (R0+0.1A) rigid O-N displacement then constrained opt  [oxime: C11=N12-O13]
 
 1 1
 C       -4.32213000      0.60863700     -0.03140800
@@ -84,73 +35,24 @@ H        4.88090997     -0.86996955     -0.63747957
 B 12 13 F
 
 --Link1--
-%chk=mol_002_E_scan_pt2.chk
+%chk=mol_002_E_rigidscan_scan_pt1.chk
 %nprocshared=8
 %mem=16GB
 #p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
 
-mol_002_E SP+NBO7/CMO after constrained opt at R0+0.10A  [oxime: C11=N12-O13]
+mol_002_E_rigidscan SP+NBO7/CMO after constrained opt at R0+0.1A  [oxime: C11=N12-O13]
 
 1 1
 
 $NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
 
 --Link1--
-%chk=mol_002_E_scan_pt3.chk
+%chk=mol_002_E_rigidscan_scan_pt2.chk
 %nprocshared=8
 %mem=16GB
 #p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
-mol_002_E scan pt3 (R0+0.15A) rigid O-N displacement then constrained opt  [oxime: C11=N12-O13]
-
-1 1
-C       -4.32213000      0.60863700     -0.03140800
-O       -3.52051600     -0.57075000      0.00040400
-C       -2.17674900     -0.43465600      0.00779600
-C       -1.45347000     -1.64481400      0.02123000
-C       -0.07860300     -1.63398300      0.02384800
-C        0.58189600     -0.39815700      0.01538500
-C       -0.13314400      0.79851800      0.00796800
-C       -1.52253500      0.79590300      0.00315800
-C        0.77951800      1.99165600     -0.00039700
-C        2.19843300      1.39431200      0.01915900
-C        2.00119500     -0.09475800      0.00097400
-N        2.87411300     -1.03596800     -0.02926400
-O        4.36561346     -0.30951432     -0.05162236
-H       -5.35383200      0.26326700     -0.04132300
-H       -4.12075400      1.19061500     -0.93456800
-H       -4.14845700      1.22141500      0.85690500
-H       -2.00554300     -2.57692400      0.02780200
-H        0.47473200     -2.56537500      0.03279800
-H       -2.06863200      1.72993200     -0.00525400
-H        0.61265100      2.59915700     -0.89235400
-H        0.59664900      2.62886900      0.86696600
-H        2.75898400      1.67190700      0.91451700
-H        2.79770600      1.69262600     -0.84292900
-H        4.75301746     -0.35269432      0.84369164
-H        4.92585746     -0.84807732     -0.63815336
-
-B 12 13 F
-
---Link1--
-%chk=mol_002_E_scan_pt3.chk
-%nprocshared=8
-%mem=16GB
-#p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
-
-mol_002_E SP+NBO7/CMO after constrained opt at R0+0.15A  [oxime: C11=N12-O13]
-
-1 1
-
-$NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
-
---Link1--
-%chk=mol_002_E_scan_pt4.chk
-%nprocshared=8
-%mem=16GB
-#p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
-
-mol_002_E scan pt4 (R0+0.20A) rigid O-N displacement then constrained opt  [oxime: C11=N12-O13]
+mol_002_E_rigidscan scan pt2 (R0+0.2A) rigid O-N displacement then constrained opt  [oxime: C11=N12-O13]
 
 1 1
 C       -4.32213000      0.60863700     -0.03140800
@@ -182,73 +84,24 @@ H        4.97080494     -0.82618509     -0.63882714
 B 12 13 F
 
 --Link1--
-%chk=mol_002_E_scan_pt4.chk
+%chk=mol_002_E_rigidscan_scan_pt2.chk
 %nprocshared=8
 %mem=16GB
 #p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
 
-mol_002_E SP+NBO7/CMO after constrained opt at R0+0.20A  [oxime: C11=N12-O13]
+mol_002_E_rigidscan SP+NBO7/CMO after constrained opt at R0+0.2A  [oxime: C11=N12-O13]
 
 1 1
 
 $NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
 
 --Link1--
-%chk=mol_002_E_scan_pt5.chk
+%chk=mol_002_E_rigidscan_scan_pt3.chk
 %nprocshared=8
 %mem=16GB
 #p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
-mol_002_E scan pt5 (R0+0.25A) rigid O-N displacement then constrained opt  [oxime: C11=N12-O13]
-
-1 1
-C       -4.32213000      0.60863700     -0.03140800
-O       -3.52051600     -0.57075000      0.00040400
-C       -2.17674900     -0.43465600      0.00779600
-C       -1.45347000     -1.64481400      0.02123000
-C       -0.07860300     -1.63398300      0.02384800
-C        0.58189600     -0.39815700      0.01538500
-C       -0.13314400      0.79851800      0.00796800
-C       -1.52253500      0.79590300      0.00315800
-C        0.77951800      1.99165600     -0.00039700
-C        2.19843300      1.39431200      0.01915900
-C        2.00119500     -0.09475800      0.00097400
-N        2.87411300     -1.03596800     -0.02926400
-O        4.45550843     -0.26572987     -0.05296993
-H       -5.35383200      0.26326700     -0.04132300
-H       -4.12075400      1.19061500     -0.93456800
-H       -4.14845700      1.22141500      0.85690500
-H       -2.00554300     -2.57692400      0.02780200
-H        0.47473200     -2.56537500      0.03279800
-H       -2.06863200      1.72993200     -0.00525400
-H        0.61265100      2.59915700     -0.89235400
-H        0.59664900      2.62886900      0.86696600
-H        2.75898400      1.67190700      0.91451700
-H        2.79770600      1.69262600     -0.84292900
-H        4.84291243     -0.30890987      0.84234407
-H        5.01575243     -0.80429287     -0.63950093
-
-B 12 13 F
-
---Link1--
-%chk=mol_002_E_scan_pt5.chk
-%nprocshared=8
-%mem=16GB
-#p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
-
-mol_002_E SP+NBO7/CMO after constrained opt at R0+0.25A  [oxime: C11=N12-O13]
-
-1 1
-
-$NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
-
---Link1--
-%chk=mol_002_E_scan_pt6.chk
-%nprocshared=8
-%mem=16GB
-#p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
-
-mol_002_E scan pt6 (R0+0.30A) rigid O-N displacement then constrained opt  [oxime: C11=N12-O13]
+mol_002_E_rigidscan scan pt3 (R0+0.3A) rigid O-N displacement then constrained opt  [oxime: C11=N12-O13]
 
 1 1
 C       -4.32213000      0.60863700     -0.03140800
@@ -280,12 +133,61 @@ H        5.06069991     -0.78240064     -0.64017472
 B 12 13 F
 
 --Link1--
-%chk=mol_002_E_scan_pt6.chk
+%chk=mol_002_E_rigidscan_scan_pt3.chk
 %nprocshared=8
 %mem=16GB
 #p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
 
-mol_002_E SP+NBO7/CMO after constrained opt at R0+0.30A  [oxime: C11=N12-O13]
+mol_002_E_rigidscan SP+NBO7/CMO after constrained opt at R0+0.3A  [oxime: C11=N12-O13]
+
+1 1
+
+$NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
+
+--Link1--
+%chk=mol_002_E_rigidscan_scan_pt4.chk
+%nprocshared=8
+%mem=16GB
+#p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
+
+mol_002_E_rigidscan scan pt4 (R0+0.4A) rigid O-N displacement then constrained opt  [oxime: C11=N12-O13]
+
+1 1
+C       -4.32213000      0.60863700     -0.03140800
+O       -3.52051600     -0.57075000      0.00040400
+C       -2.17674900     -0.43465600      0.00779600
+C       -1.45347000     -1.64481400      0.02123000
+C       -0.07860300     -1.63398300      0.02384800
+C        0.58189600     -0.39815700      0.01538500
+C       -0.13314400      0.79851800      0.00796800
+C       -1.52253500      0.79590300      0.00315800
+C        0.77951800      1.99165600     -0.00039700
+C        2.19843300      1.39431200      0.01915900
+C        2.00119500     -0.09475800      0.00097400
+N        2.87411300     -1.03596800     -0.02926400
+O        4.59035088     -0.20005319     -0.05499129
+H       -5.35383200      0.26326700     -0.04132300
+H       -4.12075400      1.19061500     -0.93456800
+H       -4.14845700      1.22141500      0.85690500
+H       -2.00554300     -2.57692400      0.02780200
+H        0.47473200     -2.56537500      0.03279800
+H       -2.06863200      1.72993200     -0.00525400
+H        0.61265100      2.59915700     -0.89235400
+H        0.59664900      2.62886900      0.86696600
+H        2.75898400      1.67190700      0.91451700
+H        2.79770600      1.69262600     -0.84292900
+H        4.97775488     -0.24323319      0.84032271
+H        5.15059488     -0.73861619     -0.64152229
+
+B 12 13 F
+
+--Link1--
+%chk=mol_002_E_rigidscan_scan_pt4.chk
+%nprocshared=8
+%mem=16GB
+#p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
+
+mol_002_E_rigidscan SP+NBO7/CMO after constrained opt at R0+0.4A  [oxime: C11=N12-O13]
 
 1 1
 

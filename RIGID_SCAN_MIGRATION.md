@@ -3,6 +3,18 @@
 Written for a fresh session picking this up to merge into `main`. Self-contained
 — don't assume access to the conversation that produced this branch.
 
+> **Basis set, for the record (2026-07-16): every job in this project — past,
+> present, and future — uses `wB97XD/6-311+G(d,p)`, no exceptions.** The only
+> deviation anywhere in this repo's history is the abandoned `6-31G(d)`
+> sensitivity test (`data/output/dft_opt_631g/`, see "Before merging" #2
+> below) that the supervisor herself suggested purely to confirm mol_006's
+> missing wCNmax minimum wasn't basis-dependent — it wasn't, that directory
+> isn't part of the pipeline, and nothing since has run at any basis other
+> than the official one (including mol_006's 8-point finescan, which is full
+> `6-311+G(d,p)` at every point). The supervisor's own published paper uses a
+> separate, higher-accuracy basis set than ours — a different reference
+> point, not a target this pipeline matches or needs to.
+
 ## Why this branch exists
 
 The supervisor reviewed `beckmann/dft/inputs.py`'s `_scan_gjf()` (Stage 3, the
