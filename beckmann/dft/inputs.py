@@ -76,7 +76,11 @@ def _nbo_gjf(name: str, oxime_label: str, basis: str = BASIS) -> str:
 
 
 def _scan_gjf(name: str, ni: int, oi: int, oxime_label: str) -> str:
-    """Stage 3: relaxed N-O bond scan 5 points (R to R+0.4 Å), NBO7 at each."""
+    """LEGACY (old internal-walk scan architecture -- see RIGID_SCAN_MIGRATION.md;
+    superseded by _scan_gjf_rigid()/prepare_scan_rigid() below, kept for
+    reference/rollback, not called by prepare_opt()). Stage 3: relaxed N-O
+    bond scan 5 points (R to R+0.4 Å) via Gaussian's own internal multi-point
+    walk -- only ran full NBO7 at 2 of the 5 points (R0 and R0+0.4)."""
     return (
         f"%chk={name}_scan.chk\n"
         f"%oldchk={name}_opt.chk\n"
@@ -167,15 +171,22 @@ def prepare_opt(
     outdir: Path,
     test_ids: set[str] = TEST_IDS,
 ) -> None:
-    """Write _opt.gjf, _nbo.gjf, and _scan.gjf for each molecule in test_ids."""
+    """Write _opt.gjf and _nbo.gjf for each molecule in test_ids (Stages 1-2
+    only). Stage 3 (_scan.gjf, rigid-scan architecture) can't be generated
+    here -- _scan_gjf_rigid() needs Stage 1's *converged* geometry, which
+    doesn't exist until Stage 1 has actually run on Citadel and its log is
+    downloaded. Call prepare_scan_rigid() as a separate step once that's
+    done (see its docstring) -- mirrors the same "generate after the
+    previous stage completes" pattern extract_scan_sp.py used under the old
+    architecture (see RIGID_SCAN_MIGRATION.md)."""
     outdir.mkdir(parents=True, exist_ok=True)
 
     suppl = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
     mols  = [m for m in suppl if m is not None]
     test_mols = [m for m in mols if m.GetProp("_Name").split("_")[1] in test_ids]
 
-    print(f"\n{'Name':<24} {'Atoms':>5}  {'Oxime':>20}  Stage1  Stage2  Stage3")
-    print("-" * 80)
+    print(f"\n{'Name':<24} {'Atoms':>5}  {'Oxime':>20}  Stage1  Stage2")
+    print("-" * 70)
 
     for mol in test_mols:
         name = mol.GetProp("_Name")
@@ -190,26 +201,22 @@ def prepare_opt(
             oxime_label = f"[oxime: C{ci}=N{ni}-O{oi}]"
         else:
             oxime_label = "[oxime: not found]"
+            print(f"  WARNING: {name} — oxime pattern not found, Stage 3 won't be possible later")
 
         mol_dir = outdir / name
         mol_dir.mkdir(exist_ok=True)
         (mol_dir / f"{name}_opt.gjf").write_text(_opt_gjf(name, coords, oxime_label))
         (mol_dir / f"{name}_nbo.gjf").write_text(_nbo_gjf(name, oxime_label))
-        if match:
-            (mol_dir / f"{name}_scan.gjf").write_text(_scan_gjf(name, ni, oi, oxime_label))
-            scan_mark = "✓"
-        else:
-            print(f"  WARNING: {name} — oxime pattern not found, _scan.gjf not written")
-            scan_mark = "✗"
-        print(f"  {name:<24} {len(coords):>5}  {oxime_label:>20}   ✓      ✓      {scan_mark}")
+        print(f"  {name:<24} {len(coords):>5}  {oxime_label:>20}   ✓      ✓")
 
     print(f"\n{len(test_mols)} structures written to {outdir}")
-    print("\nSubmit on Citadel via hpc_sync.py:")
+    print("\nSubmit Stage 1 on Citadel via hpc_sync.py:")
     print("  python scripts/dft/hpc_sync.py --mol 002 upload")
     print("  python scripts/dft/hpc_sync.py --mol 002 submit-opt")
     print("  python scripts/dft/hpc_sync.py status")
-    print("  python scripts/dft/hpc_sync.py --mol 002 submit-nbo")
     print("  python scripts/dft/hpc_sync.py --mol 002 download")
+    print("\nOnce Stage 1 shows Normal termination, generate Stage 3 with")
+    print("beckmann.dft.inputs.prepare_scan_rigid(), then upload/submit-scan/download it too.")
 
 
 def main_opt() -> None:
@@ -217,6 +224,34 @@ def main_opt() -> None:
         sdf_path = DATA_OUTPUT / "aimnet_optimized" / "best_per_substrate.sdf",
         outdir   = DATA_OUTPUT / "dft_opt",
     )
+
+
+def prepare_scan_rigid(mol_dir: Path, name: str, basis: str = BASIS,
+                        step: float = 0.1, n_points: int = 4) -> Path:
+    """Stage 3 (rigid-scan architecture) generation, run as a separate step
+    AFTER Stage 1 (_opt.gjf) has completed on Citadel and its .log has been
+    downloaded to mol_dir -- see prepare_opt()'s docstring for why this can't
+    happen upfront like Stages 1-2. Reads the converged geometry from
+    {name}_opt.log and writes {name}_scan.gjf via _scan_gjf_rigid().
+
+    step/n_points default to the standard 4-point/0.1 A series; pass a finer
+    step for a higher-resolution scan (e.g. step=0.05, n_points=8, as used
+    for mol_006_E after its standard-resolution scan missed a real interior
+    wCNmax minimum -- see Notes.md)."""
+    # Local imports: beckmann.dft.scan imports TEST_IDS/resolve_mol_name from
+    # this module at top level, so importing it back at module scope here
+    # would be circular (same reason geometry.py was split out).
+    from beckmann.dft.geometry import parse_standard_orientations
+    from beckmann.dft.scan import oxime_atom_map_from_gjf
+
+    ci, ni, oi, oxime_label = oxime_atom_map_from_gjf(mol_dir / f"{name}_opt.gjf")
+    lines = (mol_dir / f"{name}_opt.log").read_text().splitlines()
+    base_atoms = parse_standard_orientations(lines)[-1][1]
+
+    text = _scan_gjf_rigid(name, base_atoms, ni, oi, oxime_label, basis=basis, step=step, n_points=n_points)
+    out_path = mol_dir / f"{name}_scan.gjf"
+    out_path.write_text(text)
+    return out_path
 
 
 # ── single-point NBO workflow ──────────────────────────────────────────────────

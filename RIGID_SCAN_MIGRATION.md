@@ -216,3 +216,79 @@ $ git status --short
    mol_006/020's already-crashed-point-4 data under the new architecture, and
    updating `CLAUDE.md`'s pipeline documentation accordingly (currently still
    describes only the old `_scan_gjf()` architecture).
+
+---
+
+## MERGED (2026-07-16): rigid-scan architecture is now the default
+
+All four open items above are resolved:
+
+- `prepare_opt()` now writes only `_opt.gjf`/`_nbo.gjf` (Stages 1-2) upfront
+  — it can't generate Stage 3 in the same call anymore, since
+  `_scan_gjf_rigid()` needs Stage 1's *converged* geometry, which doesn't
+  exist until Stage 1 has actually run and its log is downloaded. New
+  function `prepare_scan_rigid(mol_dir, name, basis=BASIS, step=0.1,
+  n_points=4)` generates Stage 3 as a separate step after that — call it
+  once `{name}_opt.log` is on disk, then upload/`submit-scan`/download as
+  before. `_scan_gjf()` (old architecture) stays in `inputs.py` for
+  reference/rollback, just unused by default now.
+- `STAGES` in `parse_nbo.py`/`parse_cmo.py` simplified to `["nbo", "scan"]`
+  — the old `"sp2"/"sp3"/"sp4"/"sp5"` extracted-single-point workaround no
+  longer applies to any current test molecule. `extract_scan_sp.py` and
+  `hpc.py`'s `submit-scan-sp` are kept (harmless no-ops without matching
+  `_sp*.gjf` files) but marked legacy in their docstrings/help text.
+- `descriptors.py`'s `resolve_series()` no longer uses a fixed
+  `SERIES_STAGES` list (which assumed exactly 4 stretched points via the old
+  `sp2/sp3/sp4/scan_2` naming) — it now dynamically takes `"nbo"` plus every
+  `"scan_N"` stage present, sorted numerically. This is what makes mol_006_E's
+  9-point finescan series and the other 5 molecules' 5-point series both work
+  through the same code path with no special-casing. `SERIES_FALLBACK` (the
+  mol_020_E `sp5` patch) is gone — no longer needed now that a crashed point
+  doesn't take the old internal-walk job's *other* points down with it (each
+  rigid-scan point is independent by construction).
+- mol_014_Z and mol_029_Z backfilled with the rigid-scan architecture
+  (generated directly under their canonical names this time, not a
+  side-experiment suffix — no promotion step needed). mol_002_E/mol_020_E/
+  mol_021_E's already-completed `_rigidscan` data and mol_006_E's `_finescan`
+  data were promoted into the canonical `data/output/dft_opt/mol_XXX_E/`
+  locations (reused as-is, not re-run — their `.gjf`/`.log` internal
+  `%chk`/title text still reads `..._rigidscan`/`..._finescan`, cosmetic
+  only).
+
+**A real bug was caught during this regeneration**, worth knowing about if
+you're touching `parse_nbo.py`/`parse_cmo.py` again: every rigid-scan NBO
+block uses `Stable=Opt` (a wavefunction stability re-check), which — exactly
+as already documented for the supervisor's own reference log in `Notes.md`'s
+Task-5 section — prints **two** full NBO/CMO tables at the same geometry (a
+pre-optimization seed pass and the real post-optimization one), not one. The
+old architecture never hit this because its two tables (R0 and R0+0.4) were
+always at genuinely different R values, so the latent bug in both files'
+point-disambiguation logic (which enumerated raw table order rather than
+deduping by R first) never triggered. Under the rigid-scan architecture it
+did, immediately and silently — first regeneration attempt produced 9
+"points" for a 4-point molecule (mol_020_E/mol_021_E) with every R value
+doubled, and doubled (summed) E2PERT rows feeding into Ψ. Fixed at the
+source in both files' `parse_log()`: when multiple tables share the same R,
+keep only the *last* one. Verified by re-running and confirming mol_020_E/
+mol_021_E returned to exactly 5 points (not 9) and mol_006_E's real interior
+minimum was still intact at exactly one point (not duplicated) afterward.
+If you ever see a molecule's point count roughly double what you expect,
+this is the first thing to check.
+
+Old architecture's descriptor CSVs/plots and raw scan data (for the 4
+molecules replaced) are archived at
+`data/output/analysis/archive_pre_rigidscan_2026-07-15/` and
+`data/output/dft_opt/_archive_pre_rigidscan/` respectively — not deleted.
+
+**PENDING at merge time**: mol_014_Z and mol_029_Z's rigid-scan Citadel jobs
+were still running when this merged — their `_scan.gjf` is already the new
+architecture (uploaded, running), but the regenerated `descriptor_summary.md`
+committed here still reflects their *old*-architecture `.log` data (3 stage
+points each: `nbo`, `scan_1`, `scan_2`), since the new run hadn't finished/
+been downloaded yet. **Once that job completes**: `hpc_sync.py --mol 014
+download` / `--mol 029 download`, then re-run `parse_nbo.py` →
+`parse_cmo.py` → `descriptors.py` → `summarize_descriptors.py` and commit
+the result — should give both molecules a 5-point series like
+mol_002_E/020_E/021_E, replacing their currently-stale 3-point numbers. No
+other code changes needed for that follow-up, it's a pure data-regeneration
+step.

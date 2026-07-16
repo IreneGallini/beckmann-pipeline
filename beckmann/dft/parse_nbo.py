@@ -2,11 +2,17 @@
 Extract NBO second-order perturbation (E2PERT) donor->acceptor tables from
 Gaussian .log files and combine them into one CSV across the DFT test set.
 
-Each stage log (_nbo.log, _scan.log, _sp2.log, _sp3.log, _sp4.log) can contain
-one or more "Second Order Perturbation Theory Analysis of Fock Matrix in NBO
-Basis" tables. _scan.log has two (start and end of the relaxed scan); the rest
-have exactly one. Each table is tagged with the N-O distance at that geometry,
-computed from the nearest preceding "Standard orientation" block.
+Each stage log (_nbo.log, _scan.log) can contain one or more "Second Order
+Perturbation Theory Analysis of Fock Matrix in NBO Basis" tables. _nbo.log
+has exactly one (the R0 baseline). _scan.log has one per rigid-scan point --
+4 for the standard 0.1 A architecture, more for a finer scan (e.g. 8 for
+mol_006_E's 0.05 A finescan, see Notes.md) -- since the rigid-scan
+architecture (RIGID_SCAN_MIGRATION.md) natively runs NBO7 at every point,
+unlike the old internal-walk architecture this superseded (which only ran it
+at 2 of 5 points, needing 'sp2'/'sp3'/'sp4' extracted single-point
+workarounds -- no longer used by any current test molecule). Each table is
+tagged with the N-O distance at that geometry, computed from the nearest
+preceding "Standard orientation" block.
 
 Output: data/output/analysis/nbo_e2pert.csv
 """
@@ -19,7 +25,7 @@ from beckmann.dft.inputs import TEST_IDS, resolve_mol_name
 from beckmann.dft.scan import no_distance, oxime_indices_from_gjf, parse_standard_orientations
 
 TABLE_HEADER = "second order perturbation theory analysis"
-STAGES       = ["nbo", "scan", "sp2", "sp3", "sp4", "sp5"]
+STAGES       = ["nbo", "scan"]
 
 NORMAL_TERMINATION = "Normal termination of Gaussian 16"
 
@@ -106,14 +112,28 @@ def r_no_before(lines: list[str], idx: int, ni: int, oi: int) -> float | None:
 
 
 def parse_log(log_path: Path, ni: int, oi: int) -> list[dict]:
-    """Parse every E2PERT table in a .log file, each tagged with its R(N-O)."""
+    """Parse every E2PERT table in a .log file, each tagged with its R(N-O).
+
+    When multiple tables share the same R (e.g. Stable=Opt -- used in every
+    rigid-scan NBO block -- prints a pre-optimization seed-geometry pass and
+    a separate post-optimization pass, both at the same frozen scan-point R;
+    see Notes.md), only the LAST table at that R is kept. The seed isn't a
+    converged/trustworthy geometry -- keeping both would silently double-count
+    that point's E2PERT contributions (inflating Psi's K_anti/K_frag sums).
+    """
     lines  = log_path.read_text().splitlines()
     starts = find_table_starts(lines)
-    rows   = []
+
+    start_by_r: dict[float | None, int] = {}
     for start in starts:
         r_no = r_no_before(lines, start, ni, oi)
+        r_no = round(r_no, 4) if r_no is not None else None
+        start_by_r[r_no] = start  # last table at this R wins
+
+    rows = []
+    for r_no, start in start_by_r.items():
         for row in parse_table_rows(lines, start):
-            row["r_no"] = round(r_no, 4) if r_no is not None else None
+            row["r_no"] = r_no
             rows.append(row)
     return rows
 
@@ -121,26 +141,15 @@ def parse_log(log_path: Path, ni: int, oi: int) -> list[dict]:
 def collect_molecule(mol: str, mol_dir: Path) -> list[dict]:
     """Parse all available stage logs for one molecule, e.g. 'mol_002_E'.
 
-    If any present stage log didn't reach Normal termination, the whole molecule
-    is skipped rather than partially included a partial series (missing the
-    failed stage) isn't comparable to the other molecules' full 5-point series,
-    and matches how mol_020_E was previously excluded by hand (see JOB_ISSUES.md).
+    If any present stage log didn't reach Normal termination, the whole
+    molecule is skipped rather than partially included -- a partial series
+    (missing points from a crashed job) isn't comparable to another
+    molecule's complete series (see JOB_ISSUES.md).
     """
     ni, oi, _ = oxime_indices_from_gjf(mol_dir / f"{mol}_opt.gjf")
 
-    # sp5.log is a standalone restart of the scan's final point, used when the
-    # in-scan geometry never converged (see JOB_ISSUES.md, mol_020_E). When it's
-    # present and clean, it supersedes _scan.log entirely -- scan's point 1
-    # duplicates 'nbo' (same R0) and point 5 is exactly what sp5 replaces -- so
-    # _scan.log is dropped as a source rather than required to have terminated
-    # normally.
-    stages = STAGES
-    sp5_log = mol_dir / f"{mol}_sp5.log"
-    if sp5_log.exists() and log_terminated_normally(sp5_log):
-        stages = [s for s in STAGES if s != "scan"]
-
     bad_logs = [
-        p.name for stage in stages
+        p.name for stage in STAGES
         if (p := mol_dir / f"{mol}_{stage}.log").exists() and not log_terminated_normally(p)
     ]
     if bad_logs:
@@ -149,7 +158,7 @@ def collect_molecule(mol: str, mol_dir: Path) -> list[dict]:
         return []
 
     all_rows = []
-    for stage in stages:
+    for stage in STAGES:
         log_path = mol_dir / f"{mol}_{stage}.log"
         if not log_path.exists():
             continue
@@ -157,7 +166,7 @@ def collect_molecule(mol: str, mol_dir: Path) -> list[dict]:
         for row in parse_log(log_path, ni, oi):
             table_rows_by_r.setdefault(row["r_no"], []).append(row)
 
-        # _scan.log has two tables (start/end of scan) disambiguate by order.
+        # _scan.log has one table per rigid-scan point disambiguate by order.
         for point, (r_no, rows) in enumerate(sorted(
             table_rows_by_r.items(), key=lambda kv: (kv[0] is None, kv[0])
         ), start=1):

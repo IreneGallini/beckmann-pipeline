@@ -207,6 +207,12 @@ def cmd_submit_scan(config: dict, dry_run: bool, mol: str | None, local_dir: Pat
 
 
 def cmd_submit_scan_sp(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
+    """LEGACY: only relevant for the old internal-walk scan architecture,
+    where _sp2/3/4.gjf backfilled the 3 middle points a single scan job
+    couldn't get NBO for. The rigid-scan architecture (RIGID_SCAN_MIGRATION.md)
+    gets every point natively in _scan.gjf, so no molecule using it has
+    matching _sp*.gjf files -- this command is then just a harmless no-op
+    (nothing for the [ -f ... ] check to find)."""
     host       = config["HPC_HOST"]
     remote_dir = config["HPC_REMOTE_DIR"]
     dir_names  = _remote_dir_names(local_dir, mol)
@@ -368,7 +374,7 @@ def main() -> None:
     sub.add_parser("submit-opt",     help="Submit Stage 1 geometry-opt jobs ({name}_opt.gjf)")
     sub.add_parser("submit-nbo",     help="Submit Stage 2 NBO single-point jobs — AFTER Stage 1 finishes")
     sub.add_parser("submit-scan",    help="Submit Stage 3 N-O scan jobs — AFTER Stage 1 finishes")
-    sub.add_parser("submit-scan-sp", help="Submit intermediate scan SP jobs — AFTER scan finishes")
+    sub.add_parser("submit-scan-sp", help="LEGACY (old internal-walk scan architecture only, see RIGID_SCAN_MIGRATION.md) — submit intermediate scan SP jobs, {name}_sp2/3/4.gjf")
     sub.add_parser("submit-sp",      help="Submit single-point NBO jobs (for dft_sp/)")
     sub.add_parser("submit-ts",      help="Submit QST2/QST3 TS jobs ({name}_ts*.gjf, excl. _irc)")
     sub.add_parser("submit-irc",     help="Submit IRC jobs — AFTER the matching TS job is verified")

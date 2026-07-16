@@ -1,10 +1,15 @@
 """
-Extract converged intermediate geometries from a Gaussian scan log and write
-single-point NBO input files for the missing scan points.
+LEGACY (old internal-walk scan architecture only — see RIGID_SCAN_MIGRATION.md
+for the current architecture and why this was superseded). Extract converged
+intermediate geometries from a Gaussian scan log and write single-point NBO
+input files for the missing scan points.
 
-The scan (Stage 3) only runs NBO at R0 and R0+0.4 Å.  This module extracts the
-converged geometries at R0+0.1, R0+0.2, R0+0.3 and creates three single-point
-.gjf files for upload to Citadel.
+Under the old architecture, the scan (Stage 3) only ran NBO at R0 and R0+0.4 Å.
+This module extracted the converged geometries at R0+0.1, R0+0.2, R0+0.3 and
+created three single-point .gjf files for upload to Citadel. The current
+rigid-scan architecture (`beckmann/dft/inputs.py::prepare_scan_rigid()`) gets
+full NBO natively at every point, so no test molecule needs this anymore —
+kept for reference, not part of the active pipeline.
 
 Output: data/output/dft_opt/{mol}/{mol}_sp{N}.gjf  (N = 2, 3, 4)
 """

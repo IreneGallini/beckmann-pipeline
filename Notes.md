@@ -319,8 +319,16 @@ Run via `scripts/analysis/validate_reference_descriptors.py`.
 triggers a wavefunction stability re-test and reruns population analysis -- the file
 contains **two** full NBO/CMO sections (two `NBO 7.0` banners, two `Normal
 termination` lines), not one. Always use the **last** occurrence of each, per the
-handout's own warning. Our own pipeline's `.gjf` files don't use `Stable=Opt`, so this
-only matters for reading this one external reference file, not our regular molecules.
+handout's own warning.
+
+**UPDATE (2026-07-16):** the line originally here said our own pipeline's `.gjf`
+files don't use `Stable=Opt`, so this only mattered for reading this one external
+file -- no longer true. The rigid-scan architecture's NBO blocks
+(`_scan_gjf_rigid()`, `RIGID_SCAN_MIGRATION.md`) also use `Stable=Opt`, and this
+exact gotcha (two tables per point, same R, only the last trustworthy) bit
+`parse_nbo.py`/`parse_cmo.py` for real during the rigid-scan merge -- see
+`RIGID_SCAN_MIGRATION.md`'s "MERGED" section for the full story and the fix
+(both files' `parse_log()` now dedupes by R, keeping only the last table).
 
 **Tier 1 (single-geometry, R0 only) -- PASSED:** `wCNmax = 0.457` at MO 32
 (coefficient `-0.676`, `BD*(2) C7-N17`), exactly matching the wCNmax handout's worked

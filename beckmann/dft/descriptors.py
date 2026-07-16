@@ -75,19 +75,14 @@ def _label_has_atom(label: str, num: int) -> bool:
     return re.search(rf"[A-Z]+\s*{num}(?!\d)", label) is not None
 
 
-# Stages used for the 5-point R(N-O) series: 'nbo' and 'scan_1' are the same R0
-# geometry (see parse_nbo.py/parse_cmo.py docstrings) use 'nbo' for R0 and skip
-# 'scan_1' so the least-squares fit doesn't double-count one point.
-SERIES_STAGES = ["nbo", "sp2", "sp3", "sp4", "scan_2"]
-
-# When the in-scan point 5 never converged, 'sp5' is a standalone restart that
-# replaces 'scan_2' in the series (see JOB_ISSUES.md, mol_020_E). sp5.log has
-# two NBO/CMO tables at the same R the pre-optimization seed geometry and
-# the post-optimization converged one so it gets split into 'sp5_1'/'sp5_2'
-# by the same same-R disambiguation parse_nbo/parse_cmo use for _scan.log.
-# 'sp5_2' (parsed second, i.e. after optimization) is the converged, trustworthy
-# one; 'sp5_1' is the unrelaxed seed and must not be used.
-SERIES_FALLBACK = {"scan_2": "sp5_2"}
+# Historical note: under the old scan architecture (one internal Gaussian
+# multi-point walk, superseded by the rigid-scan architecture -- see
+# RIGID_SCAN_MIGRATION.md), the R(N-O) series was a fixed 5-stage list
+# mixing extracted single-points ('sp2'/'sp3'/'sp4') with the internal scan's
+# two tables ('nbo' for R0, 'scan_2' for R0+0.4), plus a 'sp5' fallback for
+# when the internal scan's last point crashed (mol_020_E). Under the current
+# rigid-scan architecture every stretched point is natively its own
+# 'scan_N' table in one _scan.log -- see resolve_series() below.
 
 
 def compute_psi_row(e2pert_rows: list[dict], ci: int, ni: int, oi: int, c_aryl: int, c_alkyl: int) -> dict:
@@ -155,16 +150,22 @@ def build_channel_descriptors(mol: str, mol_dir: Path, e2pert_rows: list[dict], 
 
 
 def resolve_series(by_stage: dict) -> list[dict]:
-    """Pick the 5-point R(N-O) series from a {stage: row} map, in SERIES_STAGES
-    order, substituting SERIES_FALLBACK (e.g. 'sp5_2' for 'scan_2') when the
-    primary stage is missing. Shared by compute_slopes() and
+    """Pick the R(N-O) series from a {stage: row} map: 'nbo' (R0) followed by
+    every 'scan_N' stage present, sorted numerically by N. Dynamic rather
+    than a fixed-length list so it naturally covers however many stretched
+    points a molecule's _scan.log actually contains -- 4 for the standard
+    0.1 A rigid-scan architecture, 8 for mol_006_E's 0.05 A finescan (see
+    Notes.md). Shared by compute_slopes() and
     scripts/analysis/summarize_descriptors.py's plots so both draw from the
-    same points -- see JOB_ISSUES.md, mol_020_E for why the fallback exists."""
+    same points."""
     series = []
-    for s in SERIES_STAGES:
-        key = s if s in by_stage else SERIES_FALLBACK.get(s)
-        if key in by_stage:
-            series.append(by_stage[key])
+    if "nbo" in by_stage:
+        series.append(by_stage["nbo"])
+    scan_stages = sorted(
+        (s for s in by_stage if s.startswith("scan_")),
+        key=lambda s: int(s.split("_")[1]),
+    )
+    series.extend(by_stage[s] for s in scan_stages)
     return series
 
 

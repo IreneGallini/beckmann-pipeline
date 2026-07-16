@@ -234,10 +234,15 @@ def parse_log(log_path: Path, ci: int, ni: int, oi: int, c_aryl: int, c_alkyl: i
 
     Each returned row carries the summary fields plus '_channels' (raw per-channel
     weight/mo/epsilon/coefficient detail, popped off by collect_molecule()).
+
+    When multiple tables share the same R (e.g. Stable=Opt's pre-optimization
+    seed-geometry pass vs. the final post-optimization pass, both at the same
+    frozen scan-point R -- see Notes.md), only the LAST table at that R is
+    kept -- the seed isn't a converged/trustworthy geometry.
     """
     lines  = log_path.read_text().splitlines()
     starts = find_cmo_sections(lines)
-    rows = []
+    row_by_r: dict[float | None, dict] = {}
     for start in starts:
         table = parse_cmo_table(lines, start)
         if not table:
@@ -246,8 +251,8 @@ def parse_log(log_path: Path, ci: int, ni: int, oi: int, c_aryl: int, c_alkyl: i
         summary, channels = compute_descriptors(table, ci, ni, c_aryl, c_alkyl)
         summary["r_no"] = round(r_no, 4) if r_no is not None else None
         summary["_channels"] = channels
-        rows.append(summary)
-    return rows
+        row_by_r[summary["r_no"]] = summary  # last table at this R wins
+    return list(row_by_r.values())
 
 
 def collect_molecule(mol: str, mol_dir: Path, c_aryl: int, c_alkyl: int) -> tuple[list[dict], list[dict]]:
@@ -258,20 +263,12 @@ def collect_molecule(mol: str, mol_dir: Path, c_aryl: int, c_alkyl: int) -> tupl
     energy, and the signed coefficient before squaring.
 
     If any present stage log didn't reach Normal termination, the whole molecule is
-    skipped rather than partially included see parse_nbo.collect_molecule for why
-    (matches mol_020_E's prior manual exclusion, see JOB_ISSUES.md).
+    skipped rather than partially included -- see parse_nbo.collect_molecule for why.
     """
     ci, ni, oi, _ = oxime_atom_map_from_gjf(mol_dir / f"{mol}_opt.gjf")
 
-    # sp5.log supersedes _scan.log when present and clean -- see the matching
-    # comment in parse_nbo.collect_molecule (JOB_ISSUES.md, mol_020_E).
-    stages = STAGES
-    sp5_log = mol_dir / f"{mol}_sp5.log"
-    if sp5_log.exists() and log_terminated_normally(sp5_log):
-        stages = [s for s in STAGES if s != "scan"]
-
     bad_logs = [
-        p.name for stage in stages
+        p.name for stage in STAGES
         if (p := mol_dir / f"{mol}_{stage}.log").exists() and not log_terminated_normally(p)
     ]
     if bad_logs:
@@ -281,13 +278,13 @@ def collect_molecule(mol: str, mol_dir: Path, c_aryl: int, c_alkyl: int) -> tupl
 
     summary_rows = []
     channel_rows = []
-    for stage in stages:
+    for stage in STAGES:
         log_path = mol_dir / f"{mol}_{stage}.log"
         if not log_path.exists():
             continue
         rows = parse_log(log_path, ci, ni, oi, c_aryl, c_alkyl)
 
-        # _scan.log has two CMO tables (start/end of scan) -- disambiguate by R(N-O) order.
+        # _scan.log has one CMO table per rigid-scan point -- disambiguate by R(N-O) order.
         for point, row in enumerate(
             sorted(rows, key=lambda r: (r["r_no"] is None, r["r_no"])), start=1
         ):

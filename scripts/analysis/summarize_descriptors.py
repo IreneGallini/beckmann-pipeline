@@ -50,7 +50,7 @@ def _float_or_none(v):
 
 
 def load_series(mol: str, channel_rows: list[dict]) -> tuple[list[float], dict[str, list[float | None]]]:
-    """R(N-O) values and per-descriptor y-values for the 5-point series, in SERIES_STAGES order."""
+    """R(N-O) values and per-descriptor y-values for the R(N-O) series, R0 followed by scan_1..scan_N in order (see resolve_series())."""
     by_stage = {row["stage"]: row for row in channel_rows if row["mol"] == mol}
     series = resolve_series(by_stage)
     r_values = [float(row["r_no"]) for row in series]
@@ -59,7 +59,16 @@ def load_series(mol: str, channel_rows: list[dict]) -> tuple[list[float], dict[s
 
 
 def find_wcnmax_extremum(mol: str, extraction_rows: list[dict]) -> dict | None:
-    """R_star/w_star/MO_index/epsilon_i_star at the interior wCNmax extremum, if any.
+    """R_star/w_star/MO_index/epsilon_i_star at the MOST PROMINENT interior
+    wCNmax extremum (largest |depth|), if any.
+
+    With only 5 points (the standard 0.1 A series) there's rarely more than
+    one candidate extremum, so "first found" and "most prominent" always
+    agreed. That stopped being true once mol_006_E's 9-point 0.05 A finescan
+    revealed a small local wobble sitting right before its real, much deeper
+    minimum (see Notes.md) -- scanning left-to-right and returning on the
+    first hit reported the minor wobble instead of the actual finding. Now
+    scans every interior point and keeps the one with the largest |depth|.
 
     MO_index/epsilon_i_star are backfilled from cmo_channel_extraction.csv's 'cn'
     channel rows (beckmann/dft/parse_cmo.py) rather than recomputed here -- that's
@@ -75,6 +84,7 @@ def find_wcnmax_extremum(mol: str, extraction_rows: list[dict]) -> dict | None:
     if len(pts) < 3:
         return None
     pts.sort(key=lambda p: p[0])
+    best = None
     for i in range(1, len(pts) - 1):
         _, w_prev, _, _ = pts[i - 1]
         r_cur, w_cur, mo_cur, eps_cur = pts[i]
@@ -85,12 +95,13 @@ def find_wcnmax_extremum(mol: str, extraction_rows: list[dict]) -> dict | None:
             # tell a barely-there wobble from a deep collapse (see mol_014_Z vs
             # mol_029_Z: both flag "yes", but 014's dip is ~4x deeper).
             depth = (w_prev + w_next) / 2 - w_cur
-            return {
-                "R_star": r_cur, "w_star": w_cur, "MO_index": mo_cur,
-                "epsilon_i_star": float(eps_cur) if eps_cur not in (None, "", "None") else None,
-                "depth": depth,
-            }
-    return None
+            if best is None or abs(depth) > abs(best["depth"]):
+                best = {
+                    "R_star": r_cur, "w_star": w_cur, "MO_index": mo_cur,
+                    "epsilon_i_star": float(eps_cur) if eps_cur not in (None, "", "None") else None,
+                    "depth": depth,
+                }
+    return best
 
 
 def main() -> None:
