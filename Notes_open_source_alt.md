@@ -286,6 +286,92 @@ highest-value next step, if this continues, is implementing the missing deflatio
 pair) rather than trying yet another localization method from scratch -- this
 follow-up's own diagnosis suggests that's precisely what's missing now.
 
+### Third follow-up: iterative deflation (`run_case_deflated` etc. in `beckmann_alt/pair_nbo.py`)
+
+Implements what the previous section identified as missing: after a channel's antibond
+is picked, subtract its accepted bond(s)' density from the working matrix before
+searching the next channel, so `cn`/`w17`/`w78` (which share atom `ci`) don't all draw
+on the same undiminished density. A Plan-agent design review beforehand confirmed the
+core deflation formula (`dm_ao - occupation * |bond_vec><bond_vec|`, using the
+*measured* occupation rather than hardcoding 2.0) is exact via a trace/electron-count
+identity, and flagged two real risks to build diagnostics for: (1) deflating only the
+single highest-occupation eigenvector per pair would leave a real gap for the C=N
+double bond specifically (two near-2.0 eigenvectors, sigma- and pi-like, not one), and
+(2) later channels' local blocks can develop negative eigenvalues (a rank-1-downdate
+effect) after deflation -- not hypothetical, needed explicit checking.
+
+**First implementation attempt failed badly, caught immediately by the PSD check the
+review recommended.** Deflating every eigenvector above the same threshold used to
+define antibond candidates (`ANTIBOND_OCC_THRESHOLD = 1.0`) produced severe PSD
+violations -- local occupations down to **-0.56 to -0.60** for later channels, far past
+noise. Cause: every local block has an "ambiguous middle" cluster of eigenvectors
+(occupation roughly 0.5-1.4) that are not clean, fully-localized 2-electron bonds --
+e.g. mol_002's `w17` block: `[0.03, 0.53, 0.84, 0.94, 1.00, 1.17, 1.37, 1.96, 2.00,
+2.00]`. Treating everything above 1.0 as "an accepted bond, safe to fully subtract" was
+a real over-correction, not a minor rounding issue.
+
+**Fix**: a separate, stricter `BOND_OCC_THRESHOLD = 1.9` for what counts as a genuine
+bond to deflate, picked from an empirical pattern that held identically across both
+molecules and all three channels -- the ambiguous middle always tops out below ~1.4,
+genuine bonds always cluster at ~1.96-2.00, with a clean gap in between every time.
+Eigenvectors strictly between the two thresholds are left untouched (neither deflated
+nor treated as an antibond candidate). This dropped the PSD violations to
+borderline/noise-level (-0.0001 to -0.011, vs. the earlier -0.56 to -0.60) -- not
+completely eliminated, but no longer a real correctness problem.
+
+**Results, both orderings, both cases** (baseline = no deflation, from the Second
+follow-up):
+
+| | wCNmax | w17max | w78max |
+|---|---|---|---|
+| **mol_002** trusted | 0.4356 (MO48) | 0.1722 (MO124) | 0.1037 (MO118) |
+| baseline (no deflation) | 0.4599 (MO47) | 0.2009 (MO57) | 0.2282 (MO47) |
+| deflated, occ-order (cn,w78,w17) | 0.4599 (MO47) | 0.2048 (MO123) | 0.2636 (MO47) |
+| deflated, cn-first (cn,w17,w78) | 0.4599 (MO47) | 0.1926 (MO123) | 0.2636 (MO47) |
+| **5_s0_Me** trusted | 0.4570 (MO32) | 0.0784 (MO47) | 0.0906 (MO39) |
+| baseline (no deflation) | 0.4602 (MO43) | 0.2729 (MO49) | 0.2334 (MO43) |
+| deflated, occ-order (cn,w78,w17) | 0.4602 (MO43) | 0.2453 (MO49) | 0.2662 (MO43) |
+| deflated, cn-first (cn,w17,w78) | 0.4602 (MO43) | 0.2270 (MO49) | 0.2662 (MO43) |
+
+**Plain verdict: partially resolved, not fixed, and not uniformly.**
+
+- **wCNmax: unaffected either way** (expected and desired -- cn is always processed
+  first in both orderings tried, so nothing is deflated before its own search runs).
+  Still the strongest result of this whole exploration.
+- **mol_002's w17: real improvement.** Moved from colliding with no trusted MO in
+  particular (MO57 baseline) to **MO123 in both orderings** -- 1 MO index from trusted
+  MO124, and magnitude (0.19-0.20) much closer to trusted (0.172) than baseline's 0.20
+  was already close, actually further tightened under cn-first ordering specifically.
+- **w78: not fixed in either case.** It still lands on the *exact same MO as wCNmax*
+  (MO47 for mol_002, MO43 for 5_s0_Me) in **every** deflated run tried, both orderings,
+  both molecules -- identical to the undeflated baseline. Deflating cn's (and w17's)
+  bonds did not stop w78's search from converging on the same broadly-effective virtual
+  MO cn already claims. If anything its magnitude got *worse* (further from trusted in
+  both cases: mol_002 0.228->0.264, 5_s0_Me 0.233->0.266).
+- **5_s0_Me's w17: no real improvement.** Stays on the same MO (49) as baseline in both
+  orderings; magnitude moves modestly (0.273->0.245/0.227) but remains ~3x the trusted
+  0.0784 -- deflation trimmed the overestimate slightly without addressing it.
+- **Ordering does measurably change the numbers** (e.g. mol_002 w17: 0.2048 occ-order
+  vs 0.1926 cn-first, a genuine ~6% difference from processing w17 before vs. after
+  w78), confirming deflation is order-dependent as expected -- but the two orderings
+  landed on the *same* winning MO in every channel in both cases, and neither ordering
+  resolved the w78/cn collision. In this data, `bond_occupation` for all three channels
+  sat within 0.0001 of 2.0000 in both molecules, so decreasing-occupation order was
+  effectively a coin flip here (exactly what the design review anticipated) -- it did
+  not turn out to be a more informative choice than cn-first in practice, though there
+  wasn't a principled reason to expect it to be either.
+
+**What this suggests**: the w78/cn collision looks less like "shared, undeflated
+density" and more like a genuine structural preference of this construction --
+something about w78's local block (ci, c_alkyl) keeps resolving toward the same
+virtual MO cn's block resolves toward, independent of what's been deflated beforehand.
+The design review's alternative idea (excluding already-claimed MO indices at the
+projection step, rather than touching the density matrix at all) was deliberately not
+implemented this pass, but this result makes it a more interesting thing to try next
+than a different deflation order or threshold -- it would directly test whether the
+collision is really about density-sharing (which deflation targets and mostly didn't
+fix) or something else entirely.
+
 ## Crude AO-projection caveats (Task 2)
 
 Expected to be the weaker of the two prototypes by construction: it sums every p-type
