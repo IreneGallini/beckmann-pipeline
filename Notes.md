@@ -113,7 +113,7 @@ For each molecule, using the `[oxime: C{ci}=N{ni}-O{oi}]` label from the `.gjf` 
 3. `E2_aryl_pi_to_CN_pi_star`: BD(2) aryl → BD\*(2) C{ci}–N{ni} (the 55 kcal/mol term)
 4. `E2_aryl_to_CN_star`: BD(1) C_aryl–C{ci} → BD\*(1) C{ci}–N{ni}
 5. `E2_alkyl_to_CN_star`: BD(1) C_alkyl–C{ci} → BD\*(1) C{ci}–N{ni}
-6. Wiberg bond indices for N{ni}–O{oi}, C{ci}–N{ni}, C_aryl–C{ci}, C_alkyl–C{ci} (from BNDIDX)
+6. Wiberg bond indices for N{ni}–O{oi}, C{ci}–N{ni}, C_aryl–C{ci}, C_alkyl–C{ci} (from BNDIDX) -- implemented in `beckmann/dft/parse_wiberg.py` (C_aryl-C{ci}/C_alkyl-C{ci} only so far), see dated entry below
 
 **Key challenge:** identifying which neighbour of C{ci} is aryl and which is alkyl without hard-coding atom numbers. Two approaches:
 - Use RDKit on the SDF to label the two C{ci} neighbours before running NBO write aryl atom index into the `.gjf` title alongside the oxime label (e.g. `[oxime: C11=N12-O13 | aryl=C6 alkyl=C10]`)
@@ -511,6 +511,38 @@ been completely invisible without the supervisor's suggested resolution increase
 other molecule's "no minimum" result in this document (and in `descriptor_summary.md`)
 should be treated as unconfirmed at standard resolution, not as evidence the mechanism
 genuinely doesn't occur there.
+
+---
+
+## Wiberg bond order (C-C aryl/alkyl) descriptor: implemented (2026-07-16)
+
+Item 6 of the original minimum-viable descriptor set (`What parse_nbo.py must extract`,
+above) called for Wiberg bond indices from `BNDIDX`, but this was never actually
+implemented — `parse_nbo.py`/`parse_cmo.py` only ever extracted E2PERT and CMO data.
+
+Checked whether the data already exists before writing anything: `BNDIDX` was already in
+the `$NBO` keylist of every `_nbo.gjf`/`_scan.gjf` this project generates, and every
+corresponding `.log` for all 4 test molecules (mol_002_E, mol_006_E, mol_020_E,
+mol_021_E) already prints the full "Wiberg bond index matrix in the NAO basis" table
+(NBO 7.0, Normal termination, confirmed at every scan point) — so this was pure
+extraction from existing data, no new Citadel jobs needed.
+
+New parser `beckmann/dft/parse_wiberg.py` pulls the C{ci}-C_aryl and C{ci}-C_alkyl
+entries out of that NxN matrix (Gaussian splits it into 9-column blocks) at each scan
+point, reusing the same `r_no` dedup/tagging and `get_substituent_map()` atom-index
+machinery as `parse_cmo.py`. Output: `data/output/analysis/bond_order_scan.csv`
+(`mol, point, R, bond_order_aryl, bond_order_alkyl`). Values spot-checked directly
+against the raw matrix text in `mol_002_E_nbo.log` — exact match.
+
+New plot `scripts/analysis/plot_bond_orders.py` → `bond_order_scan.png`, a 2x2 grid
+(one panel per test molecule) of both bond orders vs. R(N-O).
+
+**Finding:** both C-C bonds weaken monotonically as R(N-O) increases across the
+standard R0-to-R0+0.4 Å window for all 4 molecules, with the aryl bond consistently
+stronger than the alkyl bond throughout and no crossing observed — bond order alone
+doesn't show the sharp, non-monotonic signal the CMO-based wCNmax descriptor does
+(see mol_006_E's interior minimum above), consistent with selectivity being governed
+by orbital character rather than raw bond strength.
 
 ---
 
