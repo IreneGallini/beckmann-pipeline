@@ -280,15 +280,20 @@ molecules replaced) are archived at
 `data/output/analysis/archive_pre_rigidscan_2026-07-15/` and
 `data/output/dft_opt/_archive_pre_rigidscan/` respectively — not deleted.
 
-**PENDING at merge time**: mol_014_Z and mol_029_Z's rigid-scan Citadel jobs
-were still running when this merged — their `_scan.gjf` is already the new
-architecture (uploaded, running), but the regenerated `descriptor_summary.md`
-committed here still reflects their *old*-architecture `.log` data (3 stage
-points each: `nbo`, `scan_1`, `scan_2`), since the new run hadn't finished/
-been downloaded yet. **Once that job completes**: `hpc_sync.py --mol 014
-download` / `--mol 029 download`, then re-run `parse_nbo.py` →
-`parse_cmo.py` → `descriptors.py` → `summarize_descriptors.py` and commit
-the result — should give both molecules a 5-point series like
-mol_002_E/020_E/021_E, replacing their currently-stale 3-point numbers. No
-other code changes needed for that follow-up, it's a pure data-regeneration
-step.
+**RESOLVED (2026-07-16)**: mol_014_Z and mol_029_Z's rigid-scan Citadel jobs
+completed overnight (both 8/8 Normal termination, 0 errors) and were
+downloaded, replacing their old-architecture `_sp2/3/4.gjf`/`.log` (archived
+per above) with the new `_scan.log`. Full descriptor set (`parse_nbo.py` →
+`parse_cmo.py` → `descriptors.py` → `summarize_descriptors.py` →
+`parse_wiberg.py` → `plot_bond_orders.py`) regenerated for all 6 molecules.
+All six now resolve through the same `resolve_series()` path: mol_002_E/
+014_Z/020_E/021_E/029_Z each give a 5-point series (`nbo` + `scan_1..4`),
+mol_006_E gives its 9-point finescan series (`nbo` + `scan_1..8`).
+
+Notably, mol_014_Z now shows an interior wCNmax extremum (R=1.7034, depth
+0.0586) at standard 0.1 Å resolution that wasn't visible in its stale
+3-point data — despite being an F (fragmentation) outcome, unlike the
+paper's pattern where the extremum was reported only for the rearranging
+reference compound. Worth flagging at the supervisor meeting alongside the
+0.05 Å resolution question, not something to over-interpret without her
+input first.
