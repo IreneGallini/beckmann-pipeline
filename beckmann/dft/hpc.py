@@ -96,6 +96,22 @@ def mol_dirs(local_dir: Path, mol: str | None) -> list[Path]:
     return sorted(local_dir.glob("mol_*/"))
 
 
+def _remote_dir_names(local_dir: Path, mol: str | None) -> str:
+    """Space-separated, quoted directory names for a remote 'for dir in ...'
+    loop -- explicit names resolved from what's actually present under
+    local_dir, NOT a bare glob run on the remote side.
+
+    All local job directories (dft_opt/, dft_opt_rigidscan/, dft_opt_631g/,
+    etc.) upload into the SAME flat remote directory, so a remote-side glob
+    like 'mol_006_*/' matches every variant of that molecule ID across every
+    experiment, not just the one --dir/--mol actually selected -- this
+    resubmitted the wrong job twice in one session (see JOB_ISSUES.md).
+    Scoping to the local directory listing fixes it at the source for every
+    submit/download command, not just the one that happened to get hit.
+    """
+    return " ".join(f'"{d.name}"' for d in mol_dirs(local_dir, mol))
+
+
 def run(cmd: list[str], dry_run: bool) -> None:
     print(f"$ {' '.join(str(c) for c in cmd)}")
     if dry_run:
@@ -132,14 +148,13 @@ def cmd_upload(config: dict, dry_run: bool, mol: str | None, local_dir: Path) ->
 def cmd_submit_opt(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
     host       = config["HPC_HOST"]
     remote_dir = config["HPC_REMOTE_DIR"]
-    pattern    = f"mol_{mol.zfill(3)}_*" if mol else "*"
+    dir_names  = _remote_dir_names(local_dir, mol)
     g16        = config["G16_PATH"]
     submit_cmd = (
         f'{_gauss_exports(config)} && '
         f'cd {remote_dir} && '
-        f'for dir in {pattern}/; do '
-        '  name="${dir%/}"; '
-        f'  (cd "$dir" && nohup {g16} < "${{name}}_opt.gjf" > "${{name}}_opt.log" 2>&1 &); '
+        f'for name in {dir_names}; do '
+        f'  (cd "$name" && nohup {g16} < "${{name}}_opt.gjf" > "${{name}}_opt.log" 2>&1 &); '
         'done'
     )
     print(f"\n-- Launching Stage 1 (opt) jobs on {host}:{remote_dir}")
@@ -155,14 +170,13 @@ def cmd_submit_nbo(config: dict, dry_run: bool, mol: str | None, local_dir: Path
         "         Only proceed once ALL opt jobs have COMPLETED.\n"
         "         Check first: python scripts/dft/hpc_sync.py status"
     )
-    pattern = f"mol_{mol.zfill(3)}_*" if mol else "*"
+    dir_names = _remote_dir_names(local_dir, mol)
     g16     = config["G16_PATH"]
     submit_cmd = (
         f'{_gauss_exports(config)} && '
         f'cd {remote_dir} && '
-        f'for dir in {pattern}/; do '
-        '  name="${dir%/}"; '
-        f'  (cd "$dir" && nohup {g16} < "${{name}}_nbo.gjf" > "${{name}}_nbo.log" 2>&1 &); '
+        f'for name in {dir_names}; do '
+        f'  (cd "$name" && nohup {g16} < "${{name}}_nbo.gjf" > "${{name}}_nbo.log" 2>&1 &); '
         'done'
     )
     print(f"\n-- Launching Stage 2 (NBO) jobs on {host}:{remote_dir}")
@@ -178,14 +192,13 @@ def cmd_submit_scan(config: dict, dry_run: bool, mol: str | None, local_dir: Pat
         "         Only proceed once ALL opt jobs show Normal termination.\n"
         "         Check first: python scripts/dft/hpc_sync.py status"
     )
-    pattern = f"mol_{mol.zfill(3)}_*" if mol else "*"
+    dir_names = _remote_dir_names(local_dir, mol)
     g16     = config["G16_PATH"]
     submit_cmd = (
         f'{_gauss_exports(config)} && '
         f'cd {remote_dir} && '
-        f'for dir in {pattern}/; do '
-        '  name="${dir%/}"; '
-        f'  (cd "$dir" && nohup {g16} < "${{name}}_scan.gjf" > "${{name}}_scan.log" 2>&1 &); '
+        f'for name in {dir_names}; do '
+        f'  (cd "$name" && nohup {g16} < "${{name}}_scan.gjf" > "${{name}}_scan.log" 2>&1 &); '
         'done'
     )
     print(f"\n-- Launching Stage 3 (scan) jobs on {host}:{remote_dir}")
@@ -196,16 +209,15 @@ def cmd_submit_scan(config: dict, dry_run: bool, mol: str | None, local_dir: Pat
 def cmd_submit_scan_sp(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
     host       = config["HPC_HOST"]
     remote_dir = config["HPC_REMOTE_DIR"]
-    pattern    = f"mol_{mol.zfill(3)}_*" if mol else "*"
+    dir_names  = _remote_dir_names(local_dir, mol)
     g16        = config["G16_PATH"]
     submit_cmd = (
         f'{_gauss_exports(config)} && '
         f'cd {remote_dir} && '
-        f'for dir in {pattern}/; do '
-        '  name="${dir%/}"; '
+        f'for name in {dir_names}; do '
         f'  for sp in 2 3 4 5; do '
         f'    gjf="${{name}}_sp${{sp}}.gjf"; '
-        f'    [ -f "$dir/$gjf" ] && (cd "$dir" && nohup {g16} < "$gjf" > "${{gjf%.gjf}}.log" 2>&1 &); '
+        f'    [ -f "$name/$gjf" ] && (cd "$name" && nohup {g16} < "$gjf" > "${{gjf%.gjf}}.log" 2>&1 &); '
         '  done; '
         'done'
     )
@@ -217,14 +229,13 @@ def cmd_submit_scan_sp(config: dict, dry_run: bool, mol: str | None, local_dir: 
 def cmd_submit_sp(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
     host       = config["HPC_HOST"]
     remote_dir = config["HPC_REMOTE_DIR"]
-    pattern    = f"mol_{mol.zfill(3)}_*" if mol else "*"
+    dir_names  = _remote_dir_names(local_dir, mol)
     g16        = config["G16_PATH"]
     submit_cmd = (
         f'{_gauss_exports(config)} && '
         f'cd {remote_dir} && '
-        f'for dir in {pattern}/; do '
-        '  name="${dir%/}"; '
-        f'  (cd "$dir" && nohup {g16} < "${{name}}.gjf" > "${{name}}.log" 2>&1 &); '
+        f'for name in {dir_names}; do '
+        f'  (cd "$name" && nohup {g16} < "${{name}}.gjf" > "${{name}}.log" 2>&1 &); '
         'done'
     )
     print(f"\n-- Launching single-point jobs on {host}:{remote_dir}")
@@ -241,14 +252,13 @@ def cmd_submit_ts(config: dict, dry_run: bool, mol: str | None, local_dir: Path)
         "         Submit ONE molecule at a time (both channels together is fine) --\n"
         "         do not batch across the test set. Confirm before every submission."
     )
-    pattern = f"mol_{mol.zfill(3)}_*" if mol else "*"
+    dir_names = _remote_dir_names(local_dir, mol)
     g16     = config["G16_PATH"]
     submit_cmd = (
         f'{_gauss_exports(config)} && '
         f'cd {remote_dir} && '
-        f'for dir in {pattern}/; do '
-        '  name="${dir%/}"; '
-        '  (cd "$dir" && for gjf in "${name}"_ts*.gjf; do '
+        f'for name in {dir_names}; do '
+        '  (cd "$name" && for gjf in "${name}"_ts*.gjf; do '
         '    case "$gjf" in *_irc.gjf) continue ;; esac; '
         '    [ -f "$gjf" ] || continue; '
         '    log="${gjf%.gjf}.log"; '
@@ -272,14 +282,13 @@ def cmd_submit_irc(config: dict, dry_run: bool, mol: str | None, local_dir: Path
         "         coordinate) -- do not IRC an unverified stationary point.\n"
         "         Check first: python scripts/dft/hpc_sync.py status"
     )
-    pattern = f"mol_{mol.zfill(3)}_*" if mol else "*"
+    dir_names = _remote_dir_names(local_dir, mol)
     g16     = config["G16_PATH"]
     submit_cmd = (
         f'{_gauss_exports(config)} && '
         f'cd {remote_dir} && '
-        f'for dir in {pattern}/; do '
-        '  name="${dir%/}"; '
-        '  (cd "$dir" && for gjf in "${name}"_ts*_irc.gjf; do '
+        f'for name in {dir_names}; do '
+        '  (cd "$name" && for gjf in "${name}"_ts*_irc.gjf; do '
         '    [ -f "$gjf" ] || continue; '
         '    log="${gjf%.gjf}.log"; '
         f'    nohup {g16} < "$gjf" > "$log" 2>&1 & '
@@ -296,13 +305,21 @@ def cmd_download(config: dict, dry_run: bool, mol: str | None, local_dir: Path) 
     remote_dir = config["HPC_REMOTE_DIR"]
     local_dir.mkdir(parents=True, exist_ok=True)
 
-    pattern = f"mol_{mol.zfill(3)}_*" if mol else "*"
-    print(f"\n-- Downloading *.log ({pattern}) from {host}:{remote_dir}/")
+    dirs = mol_dirs(local_dir, mol)
+    print(f"\n-- Downloading *.log ({', '.join(d.name for d in dirs)}) from {host}:{remote_dir}/")
+    # Each --include is anchored with a leading '/' (relative to the rsync
+    # transfer root) so it matches ONLY that exact top-level directory, not
+    # any sibling with a similar name -- an earlier unanchored '--include=*/'
+    # matched every top-level directory on the remote (not just the selected
+    # ones), since rsync patterns without a leading '/' match at any depth.
+    # That silently re-downloaded unrelated experiments' logs into the wrong
+    # local directory (see RIGID_SCAN_MIGRATION.md).
+    include_rules = []
+    for d in dirs:
+        include_rules += [f"--include=/{d.name}/", f"--include=/{d.name}/*.log"]
     run([
         "rsync", "-avz",
-        f"--filter=+ {pattern}/",
-        "--include=*/",
-        "--include=*.log",
+        *include_rules,
         "--exclude=*",
         f"{host}:{remote_dir}/",
         str(local_dir) + "/",

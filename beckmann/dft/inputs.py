@@ -32,13 +32,13 @@ def resolve_mol_name(mol_id: str, dft_opt_dir: Path) -> str | None:
 
 # ── three-stage opt workflow ────────────────────────────────────────────────────
 
-def _opt_gjf(name: str, coords: list[tuple], oxime_label: str) -> str:
+def _opt_gjf(name: str, coords: list[tuple], oxime_label: str, basis: str = BASIS) -> str:
     """Stage 1: geometry optimisation no NBO block."""
     return (
         f"%chk={name}_opt.chk\n"
         f"%nprocshared={NPROC}\n"
         f"%mem={MEM_GB}GB\n"
-        f"#p {FUNCTIONAL}/{BASIS} opt {SOLVENT}\n"
+        f"#p {FUNCTIONAL}/{basis} opt {SOLVENT}\n"
         f"\n"
         f"{name} opt  {oxime_label}\n"
         f"\n"
@@ -51,7 +51,7 @@ def _opt_gjf(name: str, coords: list[tuple], oxime_label: str) -> str:
     )
 
 
-def _nbo_gjf(name: str, oxime_label: str) -> str:
+def _nbo_gjf(name: str, oxime_label: str, basis: str = BASIS) -> str:
     """Stage 2: NBO7 single-point at DFT geometry.
 
     pop=nbo7read (not nboread) routes through Gaussian's external-program
@@ -64,7 +64,7 @@ def _nbo_gjf(name: str, oxime_label: str) -> str:
         f"%oldchk={name}_opt.chk\n"
         f"%nprocshared={NPROC}\n"
         f"%mem={MEM_GB}GB\n"
-        f"#p {FUNCTIONAL}/{BASIS} sp pop=nbo7read geom=checkpoint guess=read {SOLVENT}\n"
+        f"#p {FUNCTIONAL}/{basis} sp pop=nbo7read geom=checkpoint guess=read {SOLVENT}\n"
         f"\n"
         f"{name} NBO  {oxime_label}\n"
         f"\n"
@@ -95,15 +95,26 @@ def _scan_gjf(name: str, ni: int, oi: int, oxime_label: str) -> str:
     )
 
 
-def _scan_gjf_rigid(name: str, base_atoms: list, ni: int, oi: int, oxime_label: str) -> str:
-    """Stage 3 (rigid-scan architecture): 4 independent points (R0+0.1 .. R0+0.4),
-    each built from the SAME Stage-1 base geometry -- not chained point-to-point,
-    not extracted from an internal Gaussian scan walk. Per point: a rigid O-N
-    displacement (pure geometry, via displace_leaving_group), then a constrained
-    optimization (opt=ModRedundant, bond frozen at the new length, everything
-    else relaxes), then a same-checkpoint Link1 continuation into a full
+def _scan_gjf_rigid(
+    name: str, base_atoms: list, ni: int, oi: int, oxime_label: str,
+    basis: str = BASIS, step: float = 0.1, n_points: int = 4,
+) -> str:
+    """Stage 3 (rigid-scan architecture): n_points independent points
+    (R0+step .. R0+step*n_points), each built from the SAME Stage-1 base
+    geometry -- not chained point-to-point, not extracted from an internal
+    Gaussian scan walk. Per point: a rigid O-N displacement (pure geometry,
+    via displace_leaving_group), then a constrained optimization
+    (opt=ModRedundant, bond frozen at the new length, everything else
+    relaxes), then a same-checkpoint Link1 continuation into a full
     NBO7/CMO single point. Matches the supervisor's reference file
     (oxime_001_scan.gjf) -- see JOB_ISSUES.md for the full rationale.
+
+    Defaults (step=0.1, n_points=4) match the standard 5-point series (with
+    R0 covered separately by Stage 2). A finer step/more points covers the
+    same R0..R0+0.4 A range at higher resolution -- e.g. mol_006_E's
+    supervisor-requested 0.05 A / 8-point rerun, to check whether a narrow
+    interior wCNmax minimum was being stepped over by the coarser default
+    grid (see JOB_ISSUES.md).
 
     NBO keywords deliberately omit her NBOMO=P120 print-window restriction:
     parse_cmo.py was fixed earlier to search the entire virtual manifold
@@ -113,8 +124,8 @@ def _scan_gjf_rigid(name: str, base_atoms: list, ni: int, oi: int, oxime_label: 
     level, upstream of anything the parser can recover.
     """
     blocks = []
-    for pt in range(1, 5):
-        delta = pt * 0.1
+    for pt in range(1, n_points + 1):
+        delta = pt * step
         displaced = displace_leaving_group(base_atoms, ni, oi, delta)
         coord_block = "\n".join(
             f"{sym:<3}  {x:>14.8f}  {y:>14.8f}  {z:>14.8f}" for sym, x, y, z in displaced
@@ -127,9 +138,9 @@ def _scan_gjf_rigid(name: str, base_atoms: list, ni: int, oi: int, oxime_label: 
             f"%chk={chk}\n"
             f"%nprocshared={NPROC}\n"
             f"%mem={MEM_GB}GB\n"
-            f"#p {FUNCTIONAL}/{BASIS} opt=(ModRedundant) SCF=(Tight,XQC) NoSymm {SOLVENT}\n"
+            f"#p {FUNCTIONAL}/{basis} opt=(ModRedundant) SCF=(Tight,XQC) NoSymm {SOLVENT}\n"
             f"\n"
-            f"{name} scan pt{pt} (R0+{delta:.1f}A) rigid O-N displacement then constrained opt  {oxime_label}\n"
+            f"{name} scan pt{pt} (R0+{delta:.2f}A) rigid O-N displacement then constrained opt  {oxime_label}\n"
             f"\n"
             f"{CHARGE} {MULTIPLICITY}\n"
             f"{coord_block}\n"
@@ -140,9 +151,9 @@ def _scan_gjf_rigid(name: str, base_atoms: list, ni: int, oi: int, oxime_label: 
             f"%chk={chk}\n"
             f"%nprocshared={NPROC}\n"
             f"%mem={MEM_GB}GB\n"
-            f"#p {FUNCTIONAL}/{BASIS} Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current {SOLVENT}\n"
+            f"#p {FUNCTIONAL}/{basis} Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current {SOLVENT}\n"
             f"\n"
-            f"{name} SP+NBO7/CMO after constrained opt at R0+{delta:.1f}A  {oxime_label}\n"
+            f"{name} SP+NBO7/CMO after constrained opt at R0+{delta:.2f}A  {oxime_label}\n"
             f"\n"
             f"{CHARGE} {MULTIPLICITY}\n"
             f"\n"

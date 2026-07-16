@@ -408,6 +408,102 @@ No test currently covers `parse_cmo.py` at all (`tests/test_descriptors.py` only
 `get_substituent_map`/`least_squares_slope`) — add one for the second-match/gap extraction
 when this is implemented.
 
+**IMPORTANT UPDATE (see below): mol_006_E's "clean relay, no dip at all" classification
+above was a scan-resolution artifact, not a genuine absence of a dip** — a real, sharp
+interior minimum sits at R=1.6608 Å, landing almost exactly on the midpoint between this
+grid's R0+0.1 (1.6108 Å) and R0+0.2 (1.7108 Å) samples, so the standard 0.1 Å grid stepped
+directly over it without ever landing near it. This calls into question whether the other
+five molecules' "no dip"/"clean relay" classifications above are similarly under-sampled
+rather than genuinely smooth — none of them have been checked at finer resolution. Treat
+every "no handoff"/"no dip" result above as unconfirmed until re-scanned at 0.05 Å (or
+finer) before relying on it for anything beyond this document's own working notes.
+
+---
+
+## mol_006_E's missing wCNmax minimum: resolved — it was a scan-resolution problem (2026-07-15)
+
+The supervisor's reference paper reports an interior wCNmax minimum for this compound
+(confirmed to be the same substrate as mol_006_E — see below); our standard 5-point,
+0.1 Å-step scan showed a smooth, monotonic increase instead
+(0.4225 → 0.4264 → 0.4277 → 0.4290 → 0.4303 across R0 to R0+0.4 Å), no minimum anywhere.
+
+**Investigation trail (each ruled out in turn before landing on the real cause):**
+
+1. **Scan architecture** (Gaussian's native internal multi-point walk vs. this session's
+   new independent rigid-displacement-per-point architecture, see
+   `RIGID_SCAN_MIGRATION.md`) — ruled out. wCNmax is ~identical between the two
+   architectures at every point both have (differences ~0.000-0.004, noise-level).
+2. **Substrate misidentification** — ruled out. Rigorously confirmed (graph/ring-position
+   analysis on both structures, not eyeballing) that mol_006_E is the same compound as the
+   supervisor's reference log `5_s0_Me.log` (repo root): the methyl substituent sits
+   exactly 3 ring-bonds from the aryl-fusion carbon in both, vs. 2 and 1 bonds for the
+   benchmark's other two methyl-indanone positional isomers (mol_009_E, mol_013_E).
+3. **Aryl/alkyl channel assignment** (`get_substituent_map()`) — ruled out. Verified
+   correct via direct connectivity inspection of the optimized structure.
+4. **The LUMO-to-LUMO+0.4 a.u. energy window** (the paper's own method, vs. this
+   codebase's unrestricted full-virtual-manifold search, see the `parse_cmo.py` docstring
+   fix earlier in this document) — ruled out via
+   `scripts/analysis/compare_wcnmax_window.py`: windowed and unrestricted searches give
+   byte-identical results (same MO, same weight) at every point for mol_006_E, so the
+   unrestricted search isn't reaching past the window to find a different, hidden
+   maximum — there's nothing there to hide.
+5. **Basis set** (our `wB97XD/6-311+G(d,p)` vs. the ~120-basis-function set implied by
+   `5_s0_Me.log`'s `genecp` route line, consistent with `6-31G(d)`) — a strong lead at
+   first (our own R0 geometry gives wCNmax=0.4225 vs. 0.457 on the reference geometry, and
+   the R0 N-O bond length itself differs by 0.046 Å between the two) — but the supervisor
+   confirmed directly that her `oxime_001_scan.gjf` reference file (also in the repo root)
+   was only a basis/method **sensitivity test**, and results for this compound type don't
+   depend on it. Ruled out by her explicit statement, not further computation on our end.
+   (The R0 geometry/bond-length discrepancy itself is still unexplained, separately from
+   the missing-minimum question — see `RIGID_SCAN_MIGRATION.md` for the raw numbers if
+   this needs revisiting.)
+6. **Scan resolution** — confirmed. The supervisor suggested keeping our basis but scanning
+   at 0.05 Å steps instead of 0.1 Å (doubling the point density over the same R0 to
+   R0+0.4 Å range: 9 points total including R0, vs. 5). Ran via
+   `_scan_gjf_rigid(..., step=0.05, n_points=8)` (new optional parameters on the
+   rigid-scan architecture, `beckmann/dft/inputs.py`), same
+   `wB97XD/6-311+G(d,p)` basis throughout, base geometry reused unchanged from the
+   existing (already-converged) Stage 1. Directory:
+   `data/output/dft_opt_finescan/mol_006_E_finescan/`.
+
+**Result: a real, sharp interior minimum at R = 1.6608 Å, wCNmax = 0.3260** — roughly
+0.10 lower than the neighboring points (0.4264 at R=1.6108, 0.4277 at R=1.7108), landing
+almost exactly on the midpoint between those two 0.1 Å-grid samples. The full 9-point
+series:
+
+| R (Å) | wCNmax |
+|---|---|
+| 1.5108 (R0) | 0.4225 |
+| 1.5608 | 0.4238 |
+| 1.6108 | 0.4264 |
+| **1.6608** | **0.3260** |
+| 1.7108 | 0.4277 |
+| 1.7608 | 0.4277 |
+| 1.8108 | 0.4290 |
+| 1.8608 | 0.4303 |
+| 1.9108 | 0.4303 |
+
+Verified genuine, not an artifact:
+- The underlying geometry optimization at this point fully converged to a real stationary
+  point (`Optimization completed` / `Stationary point found`, Maximum Force = 0.000008 a.u.,
+  far under the 0.00045 threshold) — not a crashed or partially-optimized structure.
+- The winning MO (MO 45) is the *same* orbital carrying wCNmax at every neighboring point
+  too — this isn't a different, spurious orbital being picked up. Its coefficient just
+  drops sharply right at this one geometry (+0.571 vs. ~0.65-0.66 on either side), a real
+  dip in that orbital's C{ci}-N{ni} antibond character, not an MO-identity handoff
+  artifact (contrast with the near-degenerate-mixing/clean-relay handoffs discussed above,
+  which happen at a *different* MO index changing hands — this is the same MO throughout).
+
+**Visualization**: `data/output/analysis/plots/mol006_finescan_wcnmax.png` — see
+`scripts/analysis/plot_mol006_finescan.py`.
+
+**Takeaway for the rest of the benchmark**: a 0.1 Å-spaced 5-point scan is not fine enough
+to reliably detect a real interior wCNmax minimum if it's narrow — this one would have
+been completely invisible without the supervisor's suggested resolution increase. Every
+other molecule's "no minimum" result in this document (and in `descriptor_summary.md`)
+should be treated as unconfirmed at standard resolution, not as evidence the mechanism
+genuinely doesn't occur there.
+
 ---
 
 ## Implement Orbital Resolved Electron Routing Framework
