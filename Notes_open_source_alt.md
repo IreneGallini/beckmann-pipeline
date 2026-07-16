@@ -210,17 +210,81 @@ that iterative per-atom-pair construction directly (a meaningfully larger undert
 than swapping an identification formula), not choosing a different scoring rule on top
 of LIVVO's existing output.
 
-**Bottom line for the open-source goal**: as implemented here, neither prototype is a
-viable drop-in replacement for NBO7's wCNmax, and the follow-up investigation above
-rules out "just improve the channel-identification formula" as a quick fix. The
-localization/projection machinery itself (PySCF's LIVVO, the crude AO trial function)
-is not really the bottleneck either -- NBO7's real advantage is its explicit, iterative,
-per-atom-pair Lewis-structure search, which produces antibonds that are sharply
-two-center-localized by construction, a property that both a single-shot SVD (LIVVO)
-and a hand-built trial function structurally lack. If this line of work continues, the
-next step worth trying is an iterative per-atom-pair construction closer to NBO's own
-algorithm, not a different scoring rule or a different localization method applied
-post-hoc to a fixed orbital set.
+### Second follow-up: the local per-atom-pair construction (`beckmann_alt/pair_nbo.py`)
+
+The diagnosis above pointed at something more fundamental than a scoring formula:
+LIVVO draws from one fixed, global, non-iterative ~29-30-orbital set, and no scoring
+rule over a fixed set can manufacture a better-localized orbital if the set doesn't
+contain one. This module tests the actual implied next step: instead of picking from a
+pre-built global set, build a **fresh, local subspace for each atom pair individually**,
+directly from that pair's own block of the density matrix (in a Löwdin-orthogonalized
+IAO basis) -- structurally the same operation as NBO's real Step 4, just for one
+requested pair at a time rather than NBO's full iterative multi-pair deflation across
+the whole molecule (see caveat below).
+
+**First pass (single lowest-occupation eigenvector per pair):** immediately fixed the
+collision problem completely -- cn/17/78 landed on three *distinct* MOs in both test
+cases, something neither LIVVO variant achieved even once across four attempts. Bond
+occupations came out ~2.0000 in every channel of both cases, confirming the local
+blocks are finding genuine bonding pairs. w17max/w78max for mol_002 landed within 1 MO
+index and ~10% of the trusted NBO7 magnitude -- clearly the best result of any method
+tried so far on those two channels. But wCNmax stayed badly wrong (0.087 vs trusted
+0.436 for mol_002; 0.117 vs 0.457 for 5_s0_Me -- consistently ~4-5x too small in both
+cases, and only in the cn channel).
+
+**Why, and the fix:** printing every local eigenvector's occupation for mol_002's cn=
+(C11,N12) pair showed *two* low-occupation eigenvectors, not one: `[0.016, 0.219, 0.568,
+1.02, ...]`. C=N is a double bond -- a real sigma*/pi* pair should exist locally, and
+projecting the *second*-lowest candidate (occupation 0.219) instead of the lowest gave
+wmax=0.460 at MO47, matching NBO7's trusted 0.436 at MO48 to within 6%. This is exactly
+what the real wX^max definition already does ("both BD*(1) and BD*(2) ... whichever
+gives the larger squared coefficient wins," Notes.md) -- the fix (`ANTIBOND_OCC_THRESHOLD`
+in `pair_nbo.py`) is to treat every local eigenvector below occupation 1.0 as a
+candidate, project all of them, and keep whichever wins, mirroring that rule exactly
+rather than assuming the single lowest-occupation eigenvector is always the right one.
+
+**Result after the fix:**
+
+| channel | NBO7 (trusted) | mol_002 (this method) | 5_s0_Me trusted | 5_s0_Me (this method) |
+|---|---|---|---|---|
+| wCNmax | 0.4356 (MO48) | **0.4599** (MO47) | 0.4570 (MO32) | **0.4602** (MO43) |
+| w17max | 0.1722 (MO124) | 0.2009 (MO57) | 0.0784 (MO47) | 0.2729 (MO49) |
+| w78max | 0.1037 (MO118) | 0.2282 (MO47) | 0.0906 (MO39) | 0.2334 (MO43) |
+
+**For the first time across every method tried in this exploration, wCNmax is both
+correctly ranked as the dominant channel AND numerically close to the trusted value in
+both reference cases** (within 5.6% for mol_002, within 0.7% for 5_s0_Me) -- LIVVO
+never got closer than ~4x off, crude AO-projection never got closer than ~15x off and
+actively ranked cn last. This is the single result this whole exploration was aimed at
+reproducing, and it reproduces in both cases, not just one.
+
+**The trade-off, reported plainly, not hidden:** broadening the candidate search to fix
+wCNmax reintroduced collisions elsewhere -- w78 now lands on the exact same MO as
+wCNmax in *both* cases (MO47 for mol_002, MO43 for 5_s0_Me), and w17/w78 are both
+noticeably over-estimated relative to NBO7 (roughly 1.2-3.5x too large), with their
+*relative* order (78 vs 17) not matching NBO7's in either case. Widening the candidate
+pool per channel made it more likely that unrelated channels' searches converge on the
+same broadly-delocalized virtual MO -- the same underlying tension as before (a small
+set of "generically effective" virtual MOs competing against genuinely 2-center-local
+character), just shifted from the LIVVO-selection step to the candidate-projection step.
+
+**Caveat -- what this still does not reproduce:** NBO's real algorithm is iterative
+across the *whole* molecule -- once a pair's bond/antibond is accepted, its occupancy is
+subtracted from the density matrix before the next pair is searched, so two target
+pairs sharing an atom (cn and w17 both include ci) don't draw on the same undiminished
+density there. This module searches every pair completely independently with no
+deflation between them. The w78/wCNmax MO collisions above are plausibly a direct
+symptom of that missing deflation step -- worth testing directly if this continues.
+
+**Bottom line for the open-source goal, updated**: the local per-atom-pair construction
+is a substantial, genuine step forward -- it is the first approach in this exploration
+that reproduces wCNmax's central diagnostic signature (dominant, and numerically close
+to NBO7) in both reference cases. It is not a finished replacement: w17max/w78max are
+still noticeably off and prone to colliding with each other or with wCNmax. The
+highest-value next step, if this continues, is implementing the missing deflation
+(subtracting each accepted candidate's density contribution before searching the next
+pair) rather than trying yet another localization method from scratch -- this
+follow-up's own diagnosis suggests that's precisely what's missing now.
 
 ## Crude AO-projection caveats (Task 2)
 
