@@ -18,7 +18,9 @@ mol_002_E: our own pipeline, wB97XD/6-311+G(d,p), SMD/water -- fully known level
 """
 from pathlib import Path
 
-from beckmann.dft.scan import ATOMIC_SYMBOLS, parse_standard_orientations
+from beckmann.dft.inputs import TEST_IDS, resolve_mol_name
+from beckmann.dft.scan import ATOMIC_SYMBOLS, oxime_atom_map_from_gjf, parse_standard_orientations
+from beckmann.config import DATA_OUTPUT
 
 ROOT = Path(__file__).parent.parent
 
@@ -114,4 +116,37 @@ def load_case(name: str) -> dict:
         "ci": case["ci"], "ni": case["ni"], "oi": case["oi"],
         "c_aryl": case["c_aryl"], "c_alkyl": case["c_alkyl"],
         "basis_note": case["basis_note"],
+    }
+
+
+def load_test_set_case(mol_id: str) -> dict:
+    """Same shape as load_case(), but for any of the six main-pipeline test-set
+    molecules (mol_002/006/014/020/021/029) instead of the two hand-picked reference
+    cases above. Atom map (ci/ni) and geometry are both resolved fresh via the main
+    pipeline's own utilities -- resolve_mol_name (beckmann.dft.inputs) and
+    oxime_atom_map_from_gjf (beckmann.dft.scan) -- not hardcoded per molecule the way
+    REFERENCE_CASES is, since that would mean re-transcribing six atom maps by hand
+    with the usual risk of a transcription error.
+    """
+    if mol_id not in TEST_IDS:
+        raise ValueError(f"{mol_id}: not in TEST_IDS ({sorted(TEST_IDS)})")
+    dft_opt_dir = DATA_OUTPUT / "dft_opt"
+    mol_name = resolve_mol_name(mol_id, dft_opt_dir)
+    if mol_name is None:
+        raise ValueError(f"mol_{mol_id}: no directory found under {dft_opt_dir}")
+
+    mol_dir = dft_opt_dir / mol_name
+    opt_gjf = mol_dir / f"{mol_name}_opt.gjf"
+    opt_log = mol_dir / f"{mol_name}_opt.log"
+    ci, ni, oi, _ = oxime_atom_map_from_gjf(opt_gjf)
+
+    atoms = final_geometry(opt_log)
+    return {
+        "name": mol_name,
+        "atoms": atoms,
+        "atom_spec": pyscf_atom_spec(atoms),
+        "charge": CHARGE,
+        "spin": SPIN,
+        "ci": ci, "ni": ni, "oi": oi,
+        "basis_note": "our own pipeline's 6-311+G(d,p), all-electron -- exact match to config.py",
     }

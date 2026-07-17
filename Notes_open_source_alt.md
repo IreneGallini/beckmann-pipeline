@@ -12,6 +12,22 @@ New code lives entirely in `beckmann_alt/`:
 - `pyscf_livvo.py` -- Task 1: PySCF + LIVVO (`pyscf.lo.vvo`).
 - `ao_projection.py` -- Task 2: crude AO-projection fallback.
 - `compare.py` -- Task 3: both prototypes vs. the trusted NBO7 numbers.
+- `pair_nbo.py` -- the local per-atom-pair follow-up (see "Second follow-up" below),
+  the best-performing method and the only one actively maintained going forward.
+
+**Scope decision (current)**: wCNmax is the actual predictive descriptor this project
+needs; w17max/w78max are secondary and were never the target of this prototype effort.
+`pair_nbo.py`'s code has been simplified to compute wCNmax only -- the w17/w78 channel
+logic and the entire "Third follow-up: iterative deflation" section described below
+(which existed specifically to try to fix a w17/w78 collision) have been **removed from
+the current code**, since none of that machinery was needed for wCNmax's own result
+(confirmed: wCNmax is computed independently of w17/w78 in every version tried, and in
+the deflation version specifically, cn was always processed first, so nothing had been
+deflated yet when its own value was computed -- the deflation follow-up contributed
+nothing to wCNmax's accuracy). The sections below documenting that work are kept as the
+honest historical record of what was tried and why -- available via
+`git log -- beckmann_alt/pair_nbo.py` for the actual removed code -- not as a
+description of `pair_nbo.py`'s current contents.
 
 ## Reference cases
 
@@ -381,3 +397,45 @@ real valence antibond, and performs no orthogonalization against the occupied sp
 (unlike the IAO/VVO route, which orthogonalizes by construction). Meant as a rough
 same/different-ballpark sanity check, not comparably trustworthy to the LIVVO prototype
 -- see `beckmann_alt/ao_projection.py`'s module docstring.
+
+## Fourth check: wCNmax across all 6 test-set molecules
+
+After the decision to scope `pair_nbo.py` down to wCNmax only (see the scope-decision
+note near the top of this file), tested against every main-pipeline test-set molecule
+with completed NBO7 data (`beckmann.dft.inputs.TEST_IDS`), not just mol_002 -- using
+`beckmann_alt.geometry.load_test_set_case()`, which resolves atom maps and geometry
+fresh via `resolve_mol_name`/`oxime_atom_map_from_gjf` (the main pipeline's own
+utilities) rather than hand-transcribing six atom maps.
+
+| mol | computed wCNmax (MO) | trusted wCNmax (MO) | % diff | MO offset |
+|---|---|---|---|---|
+| mol_002_E | 0.4599 (47) | 0.4356 (48) | +5.6% | -1 |
+| mol_006_E | 0.4473 (43) | 0.4225 (44) | +5.9% | -1 |
+| mol_014_Z | 0.4431 (43) | 0.4212 (44) | +5.2% | -1 |
+| mol_020_E | 0.4781 (47) | 0.4502 (48) | +6.2% | -1 |
+| mol_021_E | 0.4944 (51) | 0.4692 (52) | +5.4% | -1 |
+| mol_029_Z | 0.4933 (47) | 0.4665 (48) | +5.7% | -1 |
+| 5_s0_Me | 0.4602 (43) | 0.4570 (32) | +0.7% | -11 (different basis, see caveat above -- not directly comparable) |
+
+**The pattern is tight and systematic, not noisy.** Across all 6 of our own-pipeline
+molecules (same basis, same functional, same solvent-caveat throughout): the percent
+error sits in a narrow 5.2-6.2% band (mean ~5.7%), **always an overestimate, never an
+underestimate**, and the winning canonical MO is **exactly 1 index lower than NBO7's own
+winning MO in every single case** -- not "close," not "usually," literally 6/6. This
+level of consistency across six chemically different substrates (different ring sizes,
+substituents, and connectivity) is much more characteristic of a fixed, structural
+offset (e.g. a systematic difference in how PySCF's and Gaussian's virtual manifolds are
+ordered/counted near the frontier, or a consistent solvent/basis/dispersion-driven
+energy shift that happens to move exactly one virtual MO's relative position) than of
+six independent, coincidentally-similar numerical errors. Not root-caused yet -- would
+need a direct comparison of virtual orbital energies near the frontier between the
+Gaussian and PySCF calculations for the same molecule to pin down which piece (solvent
+model, dispersion treatment, or something else) produces the shift. If diagnosed, a
+fixed 5-6%/1-MO-index systematic offset would be straightforward to calibrate out;
+right now it's reported as an observed, reproducible pattern, not yet an explained or
+corrected one.
+
+`5_s0_Me` sits apart, as expected given its different-basis caveat -- its % error is
+much smaller (0.7%) but its MO offset is much larger (-11), underscoring that magnitude
+agreement and orbital-identity agreement are answering different questions here, and
+that `5_s0_Me`'s numbers shouldn't be pooled with the other 6 in any summary statistic.
