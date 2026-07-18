@@ -175,21 +175,24 @@ before assuming it's an unrelated optimizer issue.
 
 ---
 
-## 2026-07-16/17 — mol_020_E, mol_003_E, mol_016_E — non-convergence crashes under the new 6-point/0.05 Å architecture — fix attempted, REVERTED pending supervisor input
+## 2026-07-16/18 — mol_020_E, mol_003_E, mol_016_E, mol_023_E — non-convergence crashes under the new 6-point/0.05 Å architecture — fix attempted, REVERTED pending supervisor input
 
 **STATUS: OPEN.** A partial fix (CalcFC restart of only the crashed point,
 spliced back into the other 5 unmodified points) was attempted for
 mol_020_E and started for mol_003_E, then **reverted** — see "Why the fix
-was reverted" below. All three molecules are back to their crashed,
-unresolved state. Do not re-attempt a per-point CalcFC patch without
-re-reading this entry; the methodology question below needs an answer
-first (from the supervisor), not another one-off fix.
+was reverted" below. All four molecules below are left in their crashed,
+unresolved state (mol_023_E crashed after the revert decision, so it was
+never patched at all — straight to "leave it and document it"). Do not
+re-attempt a per-point CalcFC patch without re-reading this entry; the
+methodology question below needs an answer first (from the supervisor),
+not another one-off fix.
 
-Three of the 14 substrates attempted so far under the new 6-point/0.05 Å
-scan (`R0` to `R0+0.30 Å`) hit the same non-convergence signature. This is
-clearly a recurring structural tendency (fused-ring pucker oscillation, see
-the 2026-07-09/10 entry above for the original mol_020_E case under the old
-architecture), not a one-off fluke — worth raising as a general question,
+Four of the 19 substrates attempted so far under the new 6-point/0.05 Å
+scan (`R0` to `R0+0.30 Å`) hit the same non-convergence signature — better
+than 1 in 5 so far. This is clearly a recurring structural tendency (fused-
+ring pucker oscillation, see the 2026-07-09/10 entry above for the original
+mol_020_E case under the old architecture), not a one-off fluke — worth
+raising as a general question,
 not fixing molecule-by-molecule.
 
 **mol_020_E** — points 1-2 converged normally (4/12 Normal termination).
@@ -220,6 +223,14 @@ for next time: always `scp`/archive a crashed or suspect log to a local or
 archived path *before* killing/resubmitting a job that writes to the same
 filename — don't rely on being able to re-fetch it after the fact.
 
+**mol_023_E** — crashed earliest of the four: only point 1 converged
+(2/12). Point 2's optimization (`R0+0.10 Å`) oscillated — `Maximum Force`
+alternating between ~0.0091 and ~0.0348 for 20+ consecutive steps, never
+trending down — same `l9999.exe` error + segfault. This one happened
+*after* the revert decision below, so no fix was attempted at all — left
+crashed and documented directly. Crashed log:
+`data/output/dft_opt/_archive_pre_6pt_scan/mol_023_E_crashed_attempt/mol_023_E_scan_crashed.log`.
+
 **Why the fix was reverted:** the initial response (CalcFC + MaxCycles=300
 on just the crashed point, chained through the other unmodified points,
 spliced into one log) fixed mol_020_E's point 3 and was in progress for
@@ -244,7 +255,8 @@ handle a non-converging point within a relaxed scan — rerun the whole
 series with stronger optimizer settings uniformly, rerun just the failed
 point with different settings (accepting the inconsistency), freeze the
 specific oscillating internal coordinate, or something else? Send her the
-three crashed logs above.
+four crashed logs above (mol_020_E, mol_003_E, mol_023_E — mol_016_E's is
+unfortunately unrecoverable, see its entry above).
 
 **Takeaway for future batches:** mol_020_E-style fused-ring pucker
 oscillation is a per-molecule structural tendency, not tied to any specific
