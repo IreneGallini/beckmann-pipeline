@@ -1,7 +1,7 @@
 %chk=mol_003_E_scan_pt1.chk
 %nprocshared=8
 %mem=16GB
-#p wB97XD/6-311+G(d,p) opt=(ModRedundant,CalcFC,MaxCycles=300) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
+#p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
 mol_003_E scan pt1 (R0+0.05A) rigid O-N displacement then constrained opt  [oxime: C3=N2-O1]
 
@@ -46,7 +46,7 @@ $NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
 %chk=mol_003_E_scan_pt2.chk
 %nprocshared=8
 %mem=16GB
-#p wB97XD/6-311+G(d,p) opt=(ModRedundant,CalcFC,MaxCycles=300) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
+#p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
 mol_003_E scan pt2 (R0+0.10A) rigid O-N displacement then constrained opt  [oxime: C3=N2-O1]
 
@@ -91,7 +91,7 @@ $NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
 %chk=mol_003_E_scan_pt3.chk
 %nprocshared=8
 %mem=16GB
-#p wB97XD/6-311+G(d,p) opt=(ModRedundant,CalcFC,MaxCycles=300) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
+#p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
 mol_003_E scan pt3 (R0+0.15A) rigid O-N displacement then constrained opt  [oxime: C3=N2-O1]
 
@@ -136,7 +136,7 @@ $NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
 %chk=mol_003_E_scan_pt4.chk
 %nprocshared=8
 %mem=16GB
-#p wB97XD/6-311+G(d,p) opt=(ModRedundant,CalcFC,MaxCycles=300) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
+#p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
 mol_003_E scan pt4 (R0+0.20A) rigid O-N displacement then constrained opt  [oxime: C3=N2-O1]
 
@@ -181,7 +181,7 @@ $NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
 %chk=mol_003_E_scan_pt5.chk
 %nprocshared=8
 %mem=16GB
-#p wB97XD/6-311+G(d,p) opt=(ModRedundant,CalcFC,MaxCycles=300) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
+#p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
 mol_003_E scan pt5 (R0+0.25A) rigid O-N displacement then constrained opt  [oxime: C3=N2-O1]
 
@@ -226,7 +226,7 @@ $NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
 %chk=mol_003_E_scan_pt6.chk
 %nprocshared=8
 %mem=16GB
-#p wB97XD/6-311+G(d,p) opt=(ModRedundant,CalcFC,MaxCycles=300) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
+#p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
 mol_003_E scan pt6 (R0+0.30A) rigid O-N displacement then constrained opt  [oxime: C3=N2-O1]
 

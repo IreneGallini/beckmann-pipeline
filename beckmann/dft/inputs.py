@@ -32,13 +32,20 @@ def resolve_mol_name(mol_id: str, dft_opt_dir: Path) -> str | None:
 
 # ── three-stage opt workflow ────────────────────────────────────────────────────
 
-def _opt_gjf(name: str, coords: list[tuple], oxime_label: str, basis: str = BASIS) -> str:
-    """Stage 1: geometry optimisation no NBO block."""
+def _opt_gjf(name: str, coords: list[tuple], oxime_label: str, basis: str = BASIS, calcfc: bool = False) -> str:
+    """Stage 1: geometry optimisation no NBO block.
+
+    calcfc=True switches the route line to opt=(CalcFC,MaxCycles=300) --
+    see _scan_gjf_rigid()'s docstring for the full rationale (fused-ring
+    pucker oscillation fix, JOB_ISSUES.md). Used when a molecule's Stage 1
+    itself oscillates (e.g. mol_016_E), not just Stage 3 scan points.
+    """
+    opt_kw = "opt=(CalcFC,MaxCycles=300)" if calcfc else "opt"
     return (
         f"%chk={name}_opt.chk\n"
         f"%nprocshared={NPROC}\n"
         f"%mem={MEM_GB}GB\n"
-        f"#p {FUNCTIONAL}/{basis} opt {SOLVENT}\n"
+        f"#p {FUNCTIONAL}/{basis} {opt_kw} {SOLVENT}\n"
         f"\n"
         f"{name} opt  {oxime_label}\n"
         f"\n"
@@ -101,7 +108,7 @@ def _scan_gjf(name: str, ni: int, oi: int, oxime_label: str) -> str:
 
 def _scan_gjf_rigid(
     name: str, base_atoms: list, ni: int, oi: int, oxime_label: str,
-    basis: str = BASIS, step: float = 0.05, n_points: int = 6,
+    basis: str = BASIS, step: float = 0.05, n_points: int = 6, calcfc: bool = False,
 ) -> str:
     """Stage 3 (rigid-scan architecture): n_points independent points
     (R0+step .. R0+step*n_points), each built from the SAME Stage-1 base
@@ -132,7 +139,18 @@ def _scan_gjf_rigid(
     antibonds mixing in above a narrower window for some substrates -- a
     fixed narrow NBOMO range would reintroduce that at the Gaussian-printing
     level, upstream of anything the parser can recover.
+
+    calcfc=True applies opt=(ModRedundant,CalcFC,MaxCycles=300) to every
+    point's opt block uniformly, instead of the default opt=(ModRedundant)
+    SCF=(Tight,XQC) NoSymm -- see JOB_ISSUES.md's 2026-07-16/18 entry. This
+    was originally a per-crashed-point-only patch, which got reverted for
+    creating a methodological inconsistency within one molecule's series
+    (5 points under one setting, 1 under another). This parameter instead
+    applies it molecule-wide -- if any point in a series needs it, rerun
+    the whole series with it -- being tested as a candidate default for
+    molecules with a known/suspected fused-ring pucker oscillation risk.
     """
+    opt_kw = "opt=(ModRedundant,CalcFC,MaxCycles=300)" if calcfc else "opt=(ModRedundant)"
     blocks = []
     for pt in range(1, n_points + 1):
         delta = pt * step
@@ -148,7 +166,7 @@ def _scan_gjf_rigid(
             f"%chk={chk}\n"
             f"%nprocshared={NPROC}\n"
             f"%mem={MEM_GB}GB\n"
-            f"#p {FUNCTIONAL}/{basis} opt=(ModRedundant) SCF=(Tight,XQC) NoSymm {SOLVENT}\n"
+            f"#p {FUNCTIONAL}/{basis} {opt_kw} SCF=(Tight,XQC) NoSymm {SOLVENT}\n"
             f"\n"
             f"{name} scan pt{pt} (R0+{delta:.2f}A) rigid O-N displacement then constrained opt  {oxime_label}\n"
             f"\n"
@@ -233,7 +251,7 @@ def main_opt() -> None:
 
 
 def prepare_scan_rigid(mol_dir: Path, name: str, basis: str = BASIS,
-                        step: float = 0.05, n_points: int = 6) -> Path:
+                        step: float = 0.05, n_points: int = 6, calcfc: bool = False) -> Path:
     """Stage 3 (rigid-scan architecture) generation, run as a separate step
     AFTER Stage 1 (_opt.gjf) has completed on Citadel and its .log has been
     downloaded to mol_dir -- see prepare_opt()'s docstring for why this can't
@@ -242,7 +260,10 @@ def prepare_scan_rigid(mol_dir: Path, name: str, basis: str = BASIS,
 
     step/n_points default to the standard 6-point/0.05 A series (R0..R0+0.30 A)
     -- see _scan_gjf_rigid()'s docstring for the full rationale (mol_006_E's
-    missed interior minimum + convergence risk at R0+0.35/+0.4 A)."""
+    missed interior minimum + convergence risk at R0+0.35/+0.4 A).
+
+    calcfc=True applies CalcFC+MaxCycles=300 to all n_points uniformly --
+    see _scan_gjf_rigid()'s docstring and JOB_ISSUES.md's 2026-07-16/18 entry."""
     # Local imports: beckmann.dft.scan imports TEST_IDS/resolve_mol_name from
     # this module at top level, so importing it back at module scope here
     # would be circular (same reason geometry.py was split out).
@@ -253,7 +274,7 @@ def prepare_scan_rigid(mol_dir: Path, name: str, basis: str = BASIS,
     lines = (mol_dir / f"{name}_opt.log").read_text().splitlines()
     base_atoms = parse_standard_orientations(lines)[-1][1]
 
-    text = _scan_gjf_rigid(name, base_atoms, ni, oi, oxime_label, basis=basis, step=step, n_points=n_points)
+    text = _scan_gjf_rigid(name, base_atoms, ni, oi, oxime_label, basis=basis, step=step, n_points=n_points, calcfc=calcfc)
     out_path = mol_dir / f"{name}_scan.gjf"
     out_path.write_text(text)
     return out_path

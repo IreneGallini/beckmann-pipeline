@@ -175,21 +175,22 @@ before assuming it's an unrelated optimizer issue.
 
 ---
 
-## 2026-07-16/18 — mol_020_E, mol_003_E, mol_016_E, mol_023_E — non-convergence crashes under the new 6-point/0.05 Å architecture — fix attempted, REVERTED pending supervisor input
+## 2026-07-16/18 — mol_020_E, mol_003_E, mol_016_E, mol_023_E, mol_030_E, mol_032_E — non-convergence crashes under the new 6-point/0.05 Å architecture — fix attempted, REVERTED pending supervisor input
 
 **STATUS: OPEN.** A partial fix (CalcFC restart of only the crashed point,
 spliced back into the other 5 unmodified points) was attempted for
 mol_020_E and started for mol_003_E, then **reverted** — see "Why the fix
-was reverted" below. All four molecules below are left in their crashed,
-unresolved state (mol_023_E crashed after the revert decision, so it was
-never patched at all — straight to "leave it and document it"). Do not
-re-attempt a per-point CalcFC patch without re-reading this entry; the
-methodology question below needs an answer first (from the supervisor),
-not another one-off fix.
+was reverted" below. All five molecules below are left in their crashed,
+unresolved state (mol_023_E and mol_030_E crashed after the revert
+decision, so neither was patched at all — straight to "leave it and
+document it"). Do not re-attempt a per-point CalcFC patch without
+re-reading this entry; the methodology question below needs an answer
+first (from the supervisor), not another one-off fix.
 
-Four of the 19 substrates attempted so far under the new 6-point/0.05 Å
-scan (`R0` to `R0+0.30 Å`) hit the same non-convergence signature — better
-than 1 in 5 so far. This is clearly a recurring structural tendency (fused-
+Six crashes out of the 34 benchmark substrates processed so far (all 34
+now have at least Stage 1 attempted; all 34 have reached the Stage 3 scan)
+hit the same non-convergence signature — roughly 1 in 6. This is clearly a
+recurring structural tendency (fused-
 ring pucker oscillation, see the 2026-07-09/10 entry above for the original
 mol_020_E case under the old architecture), not a one-off fluke — worth
 raising as a general question,
@@ -223,13 +224,30 @@ for next time: always `scp`/archive a crashed or suspect log to a local or
 archived path *before* killing/resubmitting a job that writes to the same
 filename — don't rely on being able to re-fetch it after the fact.
 
-**mol_023_E** — crashed earliest of the four: only point 1 converged
+**mol_023_E** — crashed early: only point 1 converged
 (2/12). Point 2's optimization (`R0+0.10 Å`) oscillated — `Maximum Force`
 alternating between ~0.0091 and ~0.0348 for 20+ consecutive steps, never
 trending down — same `l9999.exe` error + segfault. This one happened
 *after* the revert decision below, so no fix was attempted at all — left
 crashed and documented directly. Crashed log:
 `data/output/dft_opt/_archive_pre_6pt_scan/mol_023_E_crashed_attempt/mol_023_E_scan_crashed.log`.
+
+**mol_030_E** — same pattern again: only point 1 converged (2/12). Point
+2's optimization (`R0+0.10 Å`, same point number as mol_023_E) oscillated
+— `Maximum Force` alternating between ~0.0090 and ~0.0280 for 20+
+consecutive steps — same `l9999.exe` error + segfault. Also happened after
+the revert decision; left crashed, no fix attempted. Crashed log:
+`data/output/dft_opt/_archive_pre_6pt_scan/mol_030_E_crashed_attempt/mol_030_E_scan_crashed.log`.
+
+**mol_032_E** — same pattern, point 2 again: only point 1 converged
+(2/12). `Maximum Force` alternating between ~0.0159 and ~0.0233 for 20+
+consecutive steps — same `l9999.exe` error + segfault. Left crashed, no
+fix attempted. Crashed log:
+`data/output/dft_opt/_archive_pre_6pt_scan/mol_032_E_crashed_attempt/mol_032_E_scan_crashed.log`.
+Notably its batch-6 sibling mol_033_E (also 24 atoms, both `[oxime:
+C3=N2-O1]`) converged cleanly — this isn't simply "these two molecules
+share a scaffold," so whatever's structurally triggering the oscillation
+is more specific than atom count or oxime position alone.
 
 **Why the fix was reverted:** the initial response (CalcFC + MaxCycles=300
 on just the crashed point, chained through the other unmodified points,
@@ -255,12 +273,20 @@ handle a non-converging point within a relaxed scan — rerun the whole
 series with stronger optimizer settings uniformly, rerun just the failed
 point with different settings (accepting the inconsistency), freeze the
 specific oscillating internal coordinate, or something else? Send her the
-four crashed logs above (mol_020_E, mol_003_E, mol_023_E — mol_016_E's is
-unfortunately unrecoverable, see its entry above).
+five crashed logs above (mol_020_E, mol_003_E, mol_023_E, mol_030_E,
+mol_032_E — mol_016_E's is unfortunately unrecoverable, see its entry
+above).
 
 **Takeaway for future batches:** mol_020_E-style fused-ring pucker
 oscillation is a per-molecule structural tendency, not tied to any specific
-scan point or architecture — expect it to recur on other substrates with
-similar non-aromatic fused rings, and reach for the same `CalcFC` +
-`MaxCycles` restart-from-independent-rigid-displacement fix rather than
-re-diagnosing from scratch each time.
+scan point or architecture — expect it to keep recurring on other
+substrates with similar non-aromatic fused rings (6 for 34 so far, roughly
+1 in 6 — and not simply predictable from atom count or oxime label, see
+the mol_032_E/mol_033_E comparison above). **Do
+not apply the CalcFC-restart-one-point fix anymore** — that's the
+methodology this whole entry exists to flag as inconsistent. Until the
+supervisor responds, the correct action on a new crash is: diagnose (confirm
+it's the same oscillation signature, not something new), archive the
+crashed log to `_archive_pre_6pt_scan/{mol}_crashed_attempt/`, add a
+one-paragraph entry here, and leave the molecule crashed. Do not
+patch, splice, or resubmit it.
