@@ -147,21 +147,6 @@ def main() -> None:
                 mol_id, (xs[-1], ys[-1]), xytext=(6, 0), textcoords="offset points",
                 fontsize=8, color="dimgray", va="center",
             )
-            # Mark the detected interior extremum and label its depth -- the
-            # yes/no flag in the summary table hides how deep the dip actually is
-            # (mol_014_Z vs mol_029_Z: both "yes", but 014's dip is ~4x deeper),
-            # so surface it directly on the one plot where it's diagnostic.
-            if descriptor == "wcnmax" and extrema.get(mol) is not None:
-                ex = extrema[mol]
-                ax.scatter(
-                    [ex["R_star"]], [ex["w_star"]], marker="D", s=70,
-                    facecolors="none", edgecolors=color, linewidths=2, zorder=5,
-                )
-                ax.annotate(
-                    f"Δ={ex['depth']:.3f}", (ex["R_star"], ex["w_star"]),
-                    xytext=(0, -12), textcoords="offset points",
-                    fontsize=7.5, color="dimgray", ha="center", va="top",
-                )
         ax.set_xlabel("R(N-O)  (Å)")
         ax.set_ylabel(LABELS[descriptor])
         ax.set_title(f"{LABELS[descriptor]} vs. N-O distance")
