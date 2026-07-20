@@ -290,3 +290,47 @@ it's the same oscillation signature, not something new), archive the
 crashed log to `_archive_pre_6pt_scan/{mol}_crashed_attempt/`, add a
 one-paragraph entry here, and leave the molecule crashed. Do not
 patch, splice, or resubmit it.
+
+**Update (2026-07-18/20) — uniform-CalcFC test results, still STATUS: OPEN.**
+Despite the "do not patch" note above, a test was run anyway (commit
+`b4f199f "test crashed mols with CalcFC"`) applying
+`opt=(ModRedundant,CalcFC,MaxCycles=300)` uniformly across **all** scan
+points of a molecule (not just the failing one, to avoid mixing optimizer
+settings within a single R(N-O) series) for the five molecules above. This
+was explicitly framed as a test pending the supervisor's answer, not a
+policy change — logging results here for when she responds:
+
+| Molecule | Original crash point | With uniform CalcFC |
+|---|---|---|
+| mol_023_E | pt2 (R0+0.10Å) | **Normal termination** |
+| mol_030_E | pt2 (R0+0.10Å) | **Normal termination** |
+| mol_032_E | pt2 (R0+0.10Å) | **Normal termination** |
+| mol_020_E | pt3 (R0+0.15Å) | crashed pt6 (R0+0.30Å) — delayed, not fixed |
+| mol_003_E | pt6 (R0+0.30Å) | crashed pt5 (R0+0.25Å) — no improvement (slightly worse) |
+
+So the fix is substrate-dependent: it fully resolves the oscillation for 3
+of 5, and for the other 2 it shifts which point fails without eliminating
+the failure. This is useful data for the supervisor's methodology question
+but is not evidence that uniform CalcFC is a general solution.
+
+**mol_034_E — a 7th substrate with the same crash signature, found
+2026-07-18/20, never CalcFC-tested.** Crashed at pt5 (R0+0.25Å),
+`Maximum Force` alternating with no convergent trend, same
+`l9999.exe`-then-segfault ending as every other case in this family.
+Original (non-CalcFC) `.gjf`/route line, untouched. Total count is now
+7 of 34 (~1 in 5), not 6 of 34.
+
+**mol_016_E — Stage 1 resubmit succeeded.** The original Stage 1 crash
+(entry above, log unfortunately unrecoverable) was resubmitted and reached
+Normal termination on 2026-07-18 16:09. Stage 3 (`_scan.gjf`) has not been
+generated yet — this one doesn't touch the methodology question since it's
+the molecule's first-ever scan attempt at default settings, same as every
+other substrate's initial try.
+
+**Current instruction (2026-07-20):** a summary of the above, including the
+mixed CalcFC results, has been sent to the supervisor along with the
+original methodology question (uniform-settings-per-molecule vs.
+per-point vs. dihedral-freeze vs. something else). mol_003_E, mol_020_E,
+and mol_034_E remain crashed and **should not get another fix attempt**
+until she responds — do not escalate to `NoGDIIS`/`MaxStep`/dihedral-freeze
+on these three without her input first.
