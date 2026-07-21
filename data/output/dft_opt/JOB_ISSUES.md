@@ -172,3 +172,235 @@ jobs too) — but new since `SOLVENT` was added to `beckmann/config.py`
 oscillating or crashing under `scrf=(smd,solvent=water)`, check whether the
 implicit solvent cavity is doing something pathological at that geometry
 before assuming it's an unrelated optimizer issue.
+
+---
+
+## 2026-07-16/18 — mol_020_E, mol_003_E, mol_016_E, mol_023_E, mol_030_E, mol_032_E — non-convergence crashes under the new 6-point/0.05 Å architecture — fix attempted, REVERTED pending supervisor input
+
+**STATUS: OPEN.** A partial fix (CalcFC restart of only the crashed point,
+spliced back into the other 5 unmodified points) was attempted for
+mol_020_E and started for mol_003_E, then **reverted** — see "Why the fix
+was reverted" below. All five molecules below are left in their crashed,
+unresolved state (mol_023_E and mol_030_E crashed after the revert
+decision, so neither was patched at all — straight to "leave it and
+document it"). Do not re-attempt a per-point CalcFC patch without
+re-reading this entry; the methodology question below needs an answer
+first (from the supervisor), not another one-off fix.
+
+Six crashes out of the 34 benchmark substrates processed so far (all 34
+now have at least Stage 1 attempted; all 34 have reached the Stage 3 scan)
+hit the same non-convergence signature — roughly 1 in 6. This is clearly a
+recurring structural tendency (fused-
+ring pucker oscillation, see the 2026-07-09/10 entry above for the original
+mol_020_E case under the old architecture), not a one-off fluke — worth
+raising as a general question,
+not fixing molecule-by-molecule.
+
+**mol_020_E** — points 1-2 converged normally (4/12 Normal termination).
+Point 3's optimization (`R0+0.15 Å`) oscillated — `Maximum Force`
+alternating between ~0.030 and ~0.012 for 30+ consecutive steps, never
+trending down — hit its step budget (156 of 156), then errored via
+`l9999.exe` and **segfaulted (core dumped)**, killing the whole job (points
+4-6 never ran since it's one Gaussian process across all 12 Link1 blocks).
+Crashed log (unmodified, as it happened):
+`data/output/dft_opt/mol_020_E/mol_020_E_scan.log` (also duplicated at
+`data/output/dft_opt/_archive_pre_6pt_scan/mol_020_E_crashed_attempt/mol_020_E_scan_crashed.log`).
+
+**mol_003_E** — points 1-5 converged normally (10/12). Point 6's
+optimization (`R0+0.30 Å`, the very last point) oscillated with the
+identical signature (~0.0201/~0.0210 alternating for 20+ steps), then the
+same `l9999.exe` error + segfault. Crashed log:
+`data/output/dft_opt/_archive_pre_6pt_scan/mol_003_E_crashed_attempt/mol_003_E_scan_crashed.log`.
+
+**mol_016_E** — this one crashed during **Stage 1** (the initial geometry
+optimization, before the 6-point scan even starts), same oscillation
+signature, caught proactively (still running, no convergence, after 4+
+hours against the ~15-30 min every other Stage 1 job took) rather than
+after an actual crash message. **The original crashed log for this one is
+lost** — it was inspected live over SSH, then the job was killed and
+resubmitted with the same output filename (`mol_016_E_opt.log`), which
+overwrote it via shell redirect before a local copy was ever saved. Lesson
+for next time: always `scp`/archive a crashed or suspect log to a local or
+archived path *before* killing/resubmitting a job that writes to the same
+filename — don't rely on being able to re-fetch it after the fact.
+
+**mol_023_E** — crashed early: only point 1 converged
+(2/12). Point 2's optimization (`R0+0.10 Å`) oscillated — `Maximum Force`
+alternating between ~0.0091 and ~0.0348 for 20+ consecutive steps, never
+trending down — same `l9999.exe` error + segfault. This one happened
+*after* the revert decision below, so no fix was attempted at all — left
+crashed and documented directly. Crashed log:
+`data/output/dft_opt/_archive_pre_6pt_scan/mol_023_E_crashed_attempt/mol_023_E_scan_crashed.log`.
+
+**mol_030_E** — same pattern again: only point 1 converged (2/12). Point
+2's optimization (`R0+0.10 Å`, same point number as mol_023_E) oscillated
+— `Maximum Force` alternating between ~0.0090 and ~0.0280 for 20+
+consecutive steps — same `l9999.exe` error + segfault. Also happened after
+the revert decision; left crashed, no fix attempted. Crashed log:
+`data/output/dft_opt/_archive_pre_6pt_scan/mol_030_E_crashed_attempt/mol_030_E_scan_crashed.log`.
+
+**mol_032_E** — same pattern, point 2 again: only point 1 converged
+(2/12). `Maximum Force` alternating between ~0.0159 and ~0.0233 for 20+
+consecutive steps — same `l9999.exe` error + segfault. Left crashed, no
+fix attempted. Crashed log:
+`data/output/dft_opt/_archive_pre_6pt_scan/mol_032_E_crashed_attempt/mol_032_E_scan_crashed.log`.
+Notably its batch-6 sibling mol_033_E (also 24 atoms, both `[oxime:
+C3=N2-O1]`) converged cleanly — this isn't simply "these two molecules
+share a scaffold," so whatever's structurally triggering the oscillation
+is more specific than atom count or oxime position alone.
+
+**Why the fix was reverted:** the initial response (CalcFC + MaxCycles=300
+on just the crashed point, chained through the other unmodified points,
+spliced into one log) fixed mol_020_E's point 3 and was in progress for
+mol_003_E's point 6 — but this leaves 5 of that molecule's 6 scan points
+computed under one setting and 1 point under another, within the same
+R(N-O) series that downstream descriptors (Ψ, Λ, wCNmax) treat as a single
+continuous trend. That's a methodological inconsistency, not just a
+technical fix — flagged directly by the user, who wants the supervisor's
+opinion on the right general policy (e.g., "if any point in a molecule's
+scan needs CalcFC, rerun all 6 points of that molecule with it" vs. some
+other rule) before any more crashed points get patched one at a time.
+Both in-flight fix jobs (mol_020_E's resume, mol_003_E's resume, mol_016_E's
+CalcFC Stage 1 restart) were killed; mol_020_E's and mol_016_E's canonical
+`.gjf` files were reverted to their original (non-CalcFC) route lines;
+mol_020_E's canonical `.log` was restored to the original crashed content.
+Partial/abandoned resume files kept in
+`data/output/dft_opt/_archive_pre_6pt_scan/{mol}_crashed_attempt/` for
+reference, not deleted.
+
+**Open question for the supervisor:** what's the standard/expected way to
+handle a non-converging point within a relaxed scan — rerun the whole
+series with stronger optimizer settings uniformly, rerun just the failed
+point with different settings (accepting the inconsistency), freeze the
+specific oscillating internal coordinate, or something else? Send her the
+five crashed logs above (mol_020_E, mol_003_E, mol_023_E, mol_030_E,
+mol_032_E — mol_016_E's is unfortunately unrecoverable, see its entry
+above).
+
+**Takeaway for future batches:** mol_020_E-style fused-ring pucker
+oscillation is a per-molecule structural tendency, not tied to any specific
+scan point or architecture — expect it to keep recurring on other
+substrates with similar non-aromatic fused rings (6 for 34 so far, roughly
+1 in 6 — and not simply predictable from atom count or oxime label, see
+the mol_032_E/mol_033_E comparison above). **Do
+not apply the CalcFC-restart-one-point fix anymore** — that's the
+methodology this whole entry exists to flag as inconsistent. Until the
+supervisor responds, the correct action on a new crash is: diagnose (confirm
+it's the same oscillation signature, not something new), archive the
+crashed log to `_archive_pre_6pt_scan/{mol}_crashed_attempt/`, add a
+one-paragraph entry here, and leave the molecule crashed. Do not
+patch, splice, or resubmit it.
+
+**Update (2026-07-18/20) — uniform-CalcFC test results, still STATUS: OPEN.**
+Despite the "do not patch" note above, a test was run anyway (commit
+`b4f199f "test crashed mols with CalcFC"`) applying
+`opt=(ModRedundant,CalcFC,MaxCycles=300)` uniformly across **all** scan
+points of a molecule (not just the failing one, to avoid mixing optimizer
+settings within a single R(N-O) series) for the five molecules above. This
+was explicitly framed as a test pending the supervisor's answer, not a
+policy change — logging results here for when she responds:
+
+| Molecule | Original crash point | With uniform CalcFC |
+|---|---|---|
+| mol_023_E | pt2 (R0+0.10Å) | **Normal termination** |
+| mol_030_E | pt2 (R0+0.10Å) | **Normal termination** |
+| mol_032_E | pt2 (R0+0.10Å) | **Normal termination** |
+| mol_020_E | pt3 (R0+0.15Å) | crashed pt6 (R0+0.30Å) — delayed, not fixed |
+| mol_003_E | pt6 (R0+0.30Å) | crashed pt5 (R0+0.25Å) — no improvement (slightly worse) |
+
+So the fix is substrate-dependent: it fully resolves the oscillation for 3
+of 5, and for the other 2 it shifts which point fails without eliminating
+the failure. This is useful data for the supervisor's methodology question
+but is not evidence that uniform CalcFC is a general solution.
+
+**mol_034_E — a 7th substrate with the same crash signature, found
+2026-07-18/20, never CalcFC-tested.** Crashed at pt5 (R0+0.25Å),
+`Maximum Force` alternating with no convergent trend, same
+`l9999.exe`-then-segfault ending as every other case in this family.
+Original (non-CalcFC) `.gjf`/route line, untouched. Total count is now
+7 of 34 (~1 in 5), not 6 of 34.
+
+**mol_016_E — Stage 1 resubmit succeeded.** The original Stage 1 crash
+(entry above, log unfortunately unrecoverable) was resubmitted and reached
+Normal termination on 2026-07-18 16:09. Stage 3 (`_scan.gjf`) has not been
+generated yet — this one doesn't touch the methodology question since it's
+the molecule's first-ever scan attempt at default settings, same as every
+other substrate's initial try.
+
+**Supervisor response (2026-07-20) — step-size shift, not stronger optimizer
+settings.** Rather than CalcFC/NoGDIIS/MaxStep, she suggested trying
+different scan step increments for the molecules still failing at pt5 —
+"another increments, say 0.7 or 0.4" (read as 0.07/0.04 Å, consistent with
+our 0.05 Å scale) — the idea being to sample R(N-O) points that land off the
+exact bond length where the ring-pucker double-well sits, rather than
+fighting the optimizer at that geometry.
+
+**Step-size test results (2026-07-20) — STATUS: RESOLVED for mol_020_E and
+mol_034_E, PARTIALLY RESOLVED for mol_003_E.** Generated via
+`prepare_scan_rigid(..., step=0.07/0.04, n_points=6)` in a new side-experiment
+directory `data/output/dft_opt_stepscan/{mol}_step07/` and `..._step04/`
+(same pattern as `dft_opt_631g/`, `dft_opt_finescan/` — copies of the
+molecule's `_opt.gjf`/`_opt.log`, original settings otherwise, no CalcFC).
+6 of 7 jobs succeeded:
+
+| Molecule | 0.07 Å step | 0.04 Å step |
+|---|---|---|
+| mol_003_E | ❌ crashed — same oscillation at pt5 (R0+0.35Å), segfaulted after 3h12m stuck there | ✅ **Normal termination**, all 6 points |
+| mol_020_E | ✅ **Normal termination**, all 6 points | ✅ **Normal termination**, all 6 points |
+| mol_034_E | ✅ **Normal termination**, all 6 points | ✅ **Normal termination**, all 6 points |
+
+So the ring-pucker degeneracy for mol_003_E sits close enough to the
+default-step R(N-O) sampling that a 0.07Å offset still lands on it, while
+0.04Å avoids it — a narrower miss than for mol_020_E/mol_034_E, where either
+offset cleared the problem. All logs downloaded to
+`data/output/dft_opt_stepscan/{mol}_step0{4,7}/`.
+
+**Consistency question — RESOLVED (2026-07-21).** Per the user's follow-up
+decision: mol_020_E and mol_034_E's two independently-successful scans
+(step07 and step04) are **merged into one denser per-molecule series**, not
+kept as two parallel rows — the scan's actual purpose is resolving whether
+wCNmax is monotonic or has an interior minimum, and combining every
+successfully-converged point is strictly better for that than picking one
+series and discarding the other's points. Implemented via
+`STEP_SCAN_SOURCES`/`build_stage_relabel_map()`/`relabel_rows()` in
+`beckmann/dft/inputs.py`: `parse_nbo.py`/`parse_cmo.py`/`parse_wiberg.py`'s
+`collect_molecule_stepscan()` pulls 'nbo' rows from the canonical
+`dft_opt/{mol}/{mol}_nbo.log` (Stage 2 succeeded independently of the Stage 3
+crash) and 'scan' rows from every listed `dft_opt_stepscan/` source, then
+renumbers the combined scan points as one `scan_1..scan_N` sequence sorted by
+actual R(N-O) — `resolve_series()`/`compute_slopes()` needed no changes,
+since they already just sort by the `scan_N` stage suffix regardless of
+count or spacing. Result: `mol_020_E` now has 13 points (1 nbo + 12 merged
+scan), `mol_034_E` has 12 (no nbo log ever run for it — see below),
+`mol_003_E` has 6 (step04 only, no merge needed).
+
+The original crashed logs (`dft_opt/mol_003_E/`, `dft_opt/mol_020_E/`,
+`dft_opt/mol_034_E/`, and the earlier uniform-CalcFC attempts) are left in
+place, untouched — not archived, not deleted — since they're still "the
+data," just not the series feeding the descriptor CSVs. Do not clean these up
+without a deliberate decision.
+
+**Unrelated data-completeness note found during this fix:** 28 of the 34
+benchmark substrates (everything outside the original 6-molecule `TEST_IDS`
+set) never had Stage 2 (`{mol}_nbo.log`, equilibrium NBO) run at all — only
+Stage 1 (`opt`) and Stage 3 (`scan`). This is a pre-existing gap, not
+introduced by anything above; `resolve_series()` already treats `nbo` as
+optional, so these molecules' series simply start at `scan_1` with no R0
+baseline point. Worth flagging for a future batch if the equilibrium point
+specifically (not just the stretched series) is ever needed for these 28.
+
+**Automated recovery now exists for this failure family** (see
+`CLAUDE.md`'s "Automated failure detection + recovery" section) —
+`beckmann/dft/log_diagnostics.py` classifies a log's failure mode
+programmatically, and `beckmann/dft/recovery.py` /
+`scripts/dft/auto_recover.py` automatically escalate an
+`OSCILLATING_DEGENERACY` classification through CalcFC → step=0.07 →
+step=0.04, fully automatically (including submission — an explicit product
+decision, not an oversight). Verified working end-to-end against Citadel on
+2026-07-21: `auto_recover.py --mol 020` and `--mol 003` both correctly
+detected the still-oscillating canonical scans and launched fresh
+`mol_020_E_calcfc`/`mol_003_E_calcfc` reruns; re-running immediately after
+correctly skipped via the in-flight check instead of double-submitting.
+Manual diagnosis via this file's playbook is still the right tool for any
+failure category the classifier reports as `SLOW_CONVERGENCE`/`NOISY_TRENDING`/
+`SEGFAULT`/`UNKNOWN` — those get no automated remediation attempt.

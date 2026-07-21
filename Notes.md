@@ -113,7 +113,7 @@ For each molecule, using the `[oxime: C{ci}=N{ni}-O{oi}]` label from the `.gjf` 
 3. `E2_aryl_pi_to_CN_pi_star`: BD(2) aryl → BD\*(2) C{ci}–N{ni} (the 55 kcal/mol term)
 4. `E2_aryl_to_CN_star`: BD(1) C_aryl–C{ci} → BD\*(1) C{ci}–N{ni}
 5. `E2_alkyl_to_CN_star`: BD(1) C_alkyl–C{ci} → BD\*(1) C{ci}–N{ni}
-6. Wiberg bond indices for N{ni}–O{oi}, C{ci}–N{ni}, C_aryl–C{ci}, C_alkyl–C{ci} (from BNDIDX)
+6. Wiberg bond indices for N{ni}–O{oi}, C{ci}–N{ni}, C_aryl–C{ci}, C_alkyl–C{ci} (from BNDIDX) -- implemented in `beckmann/dft/parse_wiberg.py` (C_aryl-C{ci}/C_alkyl-C{ci} only so far), see dated entry below
 
 **Key challenge:** identifying which neighbour of C{ci} is aryl and which is alkyl without hard-coding atom numbers. Two approaches:
 - Use RDKit on the SDF to label the two C{ci} neighbours before running NBO write aryl atom index into the `.gjf` title alongside the oxime label (e.g. `[oxime: C11=N12-O13 | aryl=C6 alkyl=C10]`)
@@ -319,8 +319,16 @@ Run via `scripts/analysis/validate_reference_descriptors.py`.
 triggers a wavefunction stability re-test and reruns population analysis -- the file
 contains **two** full NBO/CMO sections (two `NBO 7.0` banners, two `Normal
 termination` lines), not one. Always use the **last** occurrence of each, per the
-handout's own warning. Our own pipeline's `.gjf` files don't use `Stable=Opt`, so this
-only matters for reading this one external reference file, not our regular molecules.
+handout's own warning.
+
+**UPDATE (2026-07-16):** the line originally here said our own pipeline's `.gjf`
+files don't use `Stable=Opt`, so this only mattered for reading this one external
+file -- no longer true. The rigid-scan architecture's NBO blocks
+(`_scan_gjf_rigid()`, `RIGID_SCAN_MIGRATION.md`) also use `Stable=Opt`, and this
+exact gotcha (two tables per point, same R, only the last trustworthy) bit
+`parse_nbo.py`/`parse_cmo.py` for real during the rigid-scan merge -- see
+`RIGID_SCAN_MIGRATION.md`'s "MERGED" section for the full story and the fix
+(both files' `parse_log()` now dedupes by R, keeping only the last table).
 
 **Tier 1 (single-geometry, R0 only) -- PASSED:** `wCNmax = 0.457` at MO 32
 (coefficient `-0.676`, `BD*(2) C7-N17`), exactly matching the wCNmax handout's worked
@@ -407,6 +415,140 @@ scalar-dip proxy.
 No test currently covers `parse_cmo.py` at all (`tests/test_descriptors.py` only covers
 `get_substituent_map`/`least_squares_slope`) — add one for the second-match/gap extraction
 when this is implemented.
+
+**IMPORTANT UPDATE (see below): mol_006_E's "clean relay, no dip at all" classification
+above was a scan-resolution artifact, not a genuine absence of a dip** — a real, sharp
+interior minimum sits at R=1.6608 Å, landing almost exactly on the midpoint between this
+grid's R0+0.1 (1.6108 Å) and R0+0.2 (1.7108 Å) samples, so the standard 0.1 Å grid stepped
+directly over it without ever landing near it. This calls into question whether the other
+five molecules' "no dip"/"clean relay" classifications above are similarly under-sampled
+rather than genuinely smooth — none of them have been checked at finer resolution. Treat
+every "no handoff"/"no dip" result above as unconfirmed until re-scanned at 0.05 Å (or
+finer) before relying on it for anything beyond this document's own working notes.
+
+---
+
+## mol_006_E's missing wCNmax minimum: resolved — it was a scan-resolution problem (2026-07-15)
+
+The supervisor's reference paper reports an interior wCNmax minimum for this compound
+(confirmed to be the same substrate as mol_006_E — see below); our standard 5-point,
+0.1 Å-step scan showed a smooth, monotonic increase instead
+(0.4225 → 0.4264 → 0.4277 → 0.4290 → 0.4303 across R0 to R0+0.4 Å), no minimum anywhere.
+
+**Investigation trail (each ruled out in turn before landing on the real cause):**
+
+1. **Scan architecture** (Gaussian's native internal multi-point walk vs. this session's
+   new independent rigid-displacement-per-point architecture, see
+   `RIGID_SCAN_MIGRATION.md`) — ruled out. wCNmax is ~identical between the two
+   architectures at every point both have (differences ~0.000-0.004, noise-level).
+2. **Substrate misidentification** — ruled out. Rigorously confirmed (graph/ring-position
+   analysis on both structures, not eyeballing) that mol_006_E is the same compound as the
+   supervisor's reference log `5_s0_Me.log` (repo root): the methyl substituent sits
+   exactly 3 ring-bonds from the aryl-fusion carbon in both, vs. 2 and 1 bonds for the
+   benchmark's other two methyl-indanone positional isomers (mol_009_E, mol_013_E).
+3. **Aryl/alkyl channel assignment** (`get_substituent_map()`) — ruled out. Verified
+   correct via direct connectivity inspection of the optimized structure.
+4. **The LUMO-to-LUMO+0.4 a.u. energy window** (the paper's own method, vs. this
+   codebase's unrestricted full-virtual-manifold search, see the `parse_cmo.py` docstring
+   fix earlier in this document) — ruled out via
+   `scripts/analysis/compare_wcnmax_window.py`: windowed and unrestricted searches give
+   byte-identical results (same MO, same weight) at every point for mol_006_E, so the
+   unrestricted search isn't reaching past the window to find a different, hidden
+   maximum — there's nothing there to hide.
+5. **Basis set** (our `wB97XD/6-311+G(d,p)` vs. the ~120-basis-function set implied by
+   `5_s0_Me.log`'s `genecp` route line, consistent with `6-31G(d)`) — a strong lead at
+   first (our own R0 geometry gives wCNmax=0.4225 vs. 0.457 on the reference geometry, and
+   the R0 N-O bond length itself differs by 0.046 Å between the two) — but the supervisor
+   confirmed directly that her `oxime_001_scan.gjf` reference file (also in the repo root)
+   was only a basis/method **sensitivity test**, and results for this compound type don't
+   depend on it. Ruled out by her explicit statement, not further computation on our end.
+   (The R0 geometry/bond-length discrepancy itself is still unexplained, separately from
+   the missing-minimum question — see `RIGID_SCAN_MIGRATION.md` for the raw numbers if
+   this needs revisiting.)
+
+   **For clarity going forward: our official basis is, and remains, `wB97XD/6-311+G(d,p)`
+   for every job.** The `6-31G(d)` run above (`data/output/dft_opt_631g/`) was a one-off
+   test, not an alternative default — it's abandoned, not part of the active pipeline.
+   The supervisor's own paper uses a separate, higher-accuracy basis than either of these;
+   that's a different reference point, not something we're matching.
+6. **Scan resolution** — confirmed. The supervisor suggested keeping our basis but scanning
+   at 0.05 Å steps instead of 0.1 Å (doubling the point density over the same R0 to
+   R0+0.4 Å range: 9 points total including R0, vs. 5). Ran via
+   `_scan_gjf_rigid(..., step=0.05, n_points=8)` (new optional parameters on the
+   rigid-scan architecture, `beckmann/dft/inputs.py`), same
+   `wB97XD/6-311+G(d,p)` basis throughout, base geometry reused unchanged from the
+   existing (already-converged) Stage 1. Directory:
+   `data/output/dft_opt_finescan/mol_006_E_finescan/`.
+
+**Result: a real, sharp interior minimum at R = 1.6608 Å, wCNmax = 0.3260** — roughly
+0.10 lower than the neighboring points (0.4264 at R=1.6108, 0.4277 at R=1.7108), landing
+almost exactly on the midpoint between those two 0.1 Å-grid samples. The full 9-point
+series:
+
+| R (Å) | wCNmax |
+|---|---|
+| 1.5108 (R0) | 0.4225 |
+| 1.5608 | 0.4238 |
+| 1.6108 | 0.4264 |
+| **1.6608** | **0.3260** |
+| 1.7108 | 0.4277 |
+| 1.7608 | 0.4277 |
+| 1.8108 | 0.4290 |
+| 1.8608 | 0.4303 |
+| 1.9108 | 0.4303 |
+
+Verified genuine, not an artifact:
+- The underlying geometry optimization at this point fully converged to a real stationary
+  point (`Optimization completed` / `Stationary point found`, Maximum Force = 0.000008 a.u.,
+  far under the 0.00045 threshold) — not a crashed or partially-optimized structure.
+- The winning MO (MO 45) is the *same* orbital carrying wCNmax at every neighboring point
+  too — this isn't a different, spurious orbital being picked up. Its coefficient just
+  drops sharply right at this one geometry (+0.571 vs. ~0.65-0.66 on either side), a real
+  dip in that orbital's C{ci}-N{ni} antibond character, not an MO-identity handoff
+  artifact (contrast with the near-degenerate-mixing/clean-relay handoffs discussed above,
+  which happen at a *different* MO index changing hands — this is the same MO throughout).
+
+**Visualization**: `data/output/analysis/plots/mol006_finescan_wcnmax.png` — see
+`scripts/analysis/plot_mol006_finescan.py`.
+
+**Takeaway for the rest of the benchmark**: a 0.1 Å-spaced 5-point scan is not fine enough
+to reliably detect a real interior wCNmax minimum if it's narrow — this one would have
+been completely invisible without the supervisor's suggested resolution increase. Every
+other molecule's "no minimum" result in this document (and in `descriptor_summary.md`)
+should be treated as unconfirmed at standard resolution, not as evidence the mechanism
+genuinely doesn't occur there.
+
+---
+
+## Wiberg bond order (C-C aryl/alkyl) descriptor: implemented (2026-07-16)
+
+Item 6 of the original minimum-viable descriptor set (`What parse_nbo.py must extract`,
+above) called for Wiberg bond indices from `BNDIDX`, but this was never actually
+implemented — `parse_nbo.py`/`parse_cmo.py` only ever extracted E2PERT and CMO data.
+
+Checked whether the data already exists before writing anything: `BNDIDX` was already in
+the `$NBO` keylist of every `_nbo.gjf`/`_scan.gjf` this project generates, and every
+corresponding `.log` for all 4 test molecules (mol_002_E, mol_006_E, mol_020_E,
+mol_021_E) already prints the full "Wiberg bond index matrix in the NAO basis" table
+(NBO 7.0, Normal termination, confirmed at every scan point) — so this was pure
+extraction from existing data, no new Citadel jobs needed.
+
+New parser `beckmann/dft/parse_wiberg.py` pulls the C{ci}-C_aryl and C{ci}-C_alkyl
+entries out of that NxN matrix (Gaussian splits it into 9-column blocks) at each scan
+point, reusing the same `r_no` dedup/tagging and `get_substituent_map()` atom-index
+machinery as `parse_cmo.py`. Output: `data/output/analysis/bond_order_scan.csv`
+(`mol, point, R, bond_order_aryl, bond_order_alkyl`). Values spot-checked directly
+against the raw matrix text in `mol_002_E_nbo.log` — exact match.
+
+New plot `scripts/analysis/plot_bond_orders.py` → `bond_order_scan.png`, a 2x2 grid
+(one panel per test molecule) of both bond orders vs. R(N-O).
+
+**Finding:** both C-C bonds weaken monotonically as R(N-O) increases across the
+standard R0-to-R0+0.4 Å window for all 4 molecules, with the aryl bond consistently
+stronger than the alkyl bond throughout and no crossing observed — bond order alone
+doesn't show the sharp, non-monotonic signal the CMO-based wCNmax descriptor does
+(see mol_006_E's interior minimum above), consistent with selectivity being governed
+by orbital character rather than raw bond strength.
 
 ---
 

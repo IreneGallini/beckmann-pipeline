@@ -19,7 +19,7 @@ from rdkit import Chem
 
 from beckmann.analysis.classical import get_oxime_atoms
 from beckmann.config import DATA_OUTPUT
-from beckmann.dft.inputs import TEST_IDS, resolve_mol_name
+from beckmann.dft.inputs import ALL_IDS, resolve_mol_name
 from beckmann.dft.scan import oxime_atom_map_from_gjf
 
 BEST_PER_SUBSTRATE_SDF = DATA_OUTPUT / "aimnet_optimized" / "best_per_substrate.sdf"
@@ -75,19 +75,14 @@ def _label_has_atom(label: str, num: int) -> bool:
     return re.search(rf"[A-Z]+\s*{num}(?!\d)", label) is not None
 
 
-# Stages used for the 5-point R(N-O) series: 'nbo' and 'scan_1' are the same R0
-# geometry (see parse_nbo.py/parse_cmo.py docstrings) use 'nbo' for R0 and skip
-# 'scan_1' so the least-squares fit doesn't double-count one point.
-SERIES_STAGES = ["nbo", "sp2", "sp3", "sp4", "scan_2"]
-
-# When the in-scan point 5 never converged, 'sp5' is a standalone restart that
-# replaces 'scan_2' in the series (see JOB_ISSUES.md, mol_020_E). sp5.log has
-# two NBO/CMO tables at the same R the pre-optimization seed geometry and
-# the post-optimization converged one so it gets split into 'sp5_1'/'sp5_2'
-# by the same same-R disambiguation parse_nbo/parse_cmo use for _scan.log.
-# 'sp5_2' (parsed second, i.e. after optimization) is the converged, trustworthy
-# one; 'sp5_1' is the unrelaxed seed and must not be used.
-SERIES_FALLBACK = {"scan_2": "sp5_2"}
+# Historical note: under the old scan architecture (one internal Gaussian
+# multi-point walk, superseded by the rigid-scan architecture -- see
+# RIGID_SCAN_MIGRATION.md), the R(N-O) series was a fixed 5-stage list
+# mixing extracted single-points ('sp2'/'sp3'/'sp4') with the internal scan's
+# two tables ('nbo' for R0, 'scan_2' for R0+0.4), plus a 'sp5' fallback for
+# when the internal scan's last point crashed (mol_020_E). Under the current
+# rigid-scan architecture every stretched point is natively its own
+# 'scan_N' table in one _scan.log -- see resolve_series() below.
 
 
 def compute_psi_row(e2pert_rows: list[dict], ci: int, ni: int, oi: int, c_aryl: int, c_alkyl: int) -> dict:
@@ -155,16 +150,22 @@ def build_channel_descriptors(mol: str, mol_dir: Path, e2pert_rows: list[dict], 
 
 
 def resolve_series(by_stage: dict) -> list[dict]:
-    """Pick the 5-point R(N-O) series from a {stage: row} map, in SERIES_STAGES
-    order, substituting SERIES_FALLBACK (e.g. 'sp5_2' for 'scan_2') when the
-    primary stage is missing. Shared by compute_slopes() and
+    """Pick the R(N-O) series from a {stage: row} map: 'nbo' (R0) followed by
+    every 'scan_N' stage present, sorted numerically by N. Dynamic rather
+    than a fixed-length list so it naturally covers however many stretched
+    points a molecule's _scan.log actually contains -- 4 for the standard
+    0.1 A rigid-scan architecture, 8 for mol_006_E's 0.05 A finescan (see
+    Notes.md). Shared by compute_slopes() and
     scripts/analysis/summarize_descriptors.py's plots so both draw from the
-    same points -- see JOB_ISSUES.md, mol_020_E for why the fallback exists."""
+    same points."""
     series = []
-    for s in SERIES_STAGES:
-        key = s if s in by_stage else SERIES_FALLBACK.get(s)
-        if key in by_stage:
-            series.append(by_stage[key])
+    if "nbo" in by_stage:
+        series.append(by_stage["nbo"])
+    scan_stages = sorted(
+        (s for s in by_stage if s.startswith("scan_")),
+        key=lambda s: int(s.split("_")[1]),
+    )
+    series.extend(by_stage[s] for s in scan_stages)
     return series
 
 
@@ -182,6 +183,88 @@ def compute_slopes(mol: str, channel_rows: list[dict]) -> dict:
     return slopes
 
 
+DESCRIPTORS = ["psi", "log_lambda", "wcnmax", "w17max", "w78max"]
+
+
+def _float_or_none(v):
+    if v in (None, "", "None"):
+        return None
+    return float(v)
+
+
+def load_series(mol: str, channel_rows: list[dict]) -> tuple[list[float], dict[str, list[float | None]]]:
+    """R(N-O) values and per-descriptor y-values for one molecule's series,
+    R0 (if present) followed by scan_1..scan_N in order (see resolve_series()).
+    Moved here from scripts/analysis/summarize_descriptors.py so it's
+    importable package code, not script-local -- reused by beckmann.dft.viz
+    and, eventually, the Flask web UI, not just this one analysis script."""
+    by_stage = {row["stage"]: row for row in channel_rows if row["mol"] == mol}
+    series = resolve_series(by_stage)
+    r_values = [float(row["r_no"]) for row in series]
+    y_by_descriptor = {d: [_float_or_none(row[d]) for row in series] for d in DESCRIPTORS}
+    return r_values, y_by_descriptor
+
+
+def find_wcnmax_extremum(mol: str, extraction_rows: list[dict]) -> dict | None:
+    """R_star/w_star/MO_index/epsilon_i_star at the MOST PROMINENT interior
+    wCNmax extremum -- min OR max, largest |depth| -- if any. See
+    find_wcnmax_minimum() below for the minimum-only filter the wCNmax rule
+    (beckmann/dft/wcnmax_rule.py) actually needs.
+
+    With only 5 points (the standard 0.1 A series) there's rarely more than
+    one candidate extremum, so "first found" and "most prominent" always
+    agreed. That stopped being true once mol_006_E's 9-point 0.05 A finescan
+    revealed a small local wobble sitting right before its real, much deeper
+    minimum (see Notes.md) -- scanning left-to-right and returning on the
+    first hit reported the minor wobble instead of the actual finding. Now
+    scans every interior point and keeps the one with the largest |depth|.
+
+    MO_index/epsilon_i_star are backfilled from cmo_channel_extraction.csv's 'cn'
+    channel rows (beckmann/dft/parse_cmo.py) rather than recomputed here -- that's
+    the only place which virtual MO achieved the max weight, and its orbital energy,
+    are actually recorded.
+    """
+    by_stage = {
+        r["stage"]: r for r in extraction_rows
+        if r["mol"] == mol and r["channel"] == "cn" and r["weight"] not in (None, "", "None")
+    }
+    rows = resolve_series(by_stage)
+    pts = [(float(r["R_NO"]), float(r["weight"]), r["MO_index"], r["epsilon_i_star"]) for r in rows]
+    if len(pts) < 3:
+        return None
+    pts.sort(key=lambda p: p[0])
+    best = None
+    for i in range(1, len(pts) - 1):
+        _, w_prev, _, _ = pts[i - 1]
+        r_cur, w_cur, mo_cur, eps_cur = pts[i]
+        _, w_next, _, _ = pts[i + 1]
+        if (w_cur < w_prev and w_cur < w_next) or (w_cur > w_prev and w_cur > w_next):
+            # depth = how far w_cur sits below (positive) or above (negative) the
+            # midpoint of its two neighbors -- the yes/no extremum flag alone can't
+            # tell a barely-there wobble from a deep collapse (see mol_014_Z vs
+            # mol_029_Z: both flag "yes", but 014's dip is ~4x deeper).
+            depth = (w_prev + w_next) / 2 - w_cur
+            if best is None or abs(depth) > abs(best["depth"]):
+                best = {
+                    "R_star": r_cur, "w_star": w_cur, "MO_index": mo_cur,
+                    "epsilon_i_star": float(eps_cur) if eps_cur not in (None, "", "None") else None,
+                    "depth": depth,
+                }
+    return best
+
+
+def find_wcnmax_minimum(mol: str, extraction_rows: list[dict]) -> dict | None:
+    """Same as find_wcnmax_extremum(), but only a genuine interior MINIMUM
+    counts (depth > 0 -- w_cur sits below both neighbors) -- a local maximum
+    (depth < 0) returns None here. This is the specific signature
+    beckmann.dft.wcnmax_rule.predict_from_wcnmax() uses: an interior minimum
+    predicts rearrangement ('R'), its absence predicts fragmentation ('F')."""
+    extremum = find_wcnmax_extremum(mol, extraction_rows)
+    if extremum is None or extremum["depth"] <= 0:
+        return None
+    return extremum
+
+
 def main() -> None:
     dft_opt_dir = DATA_OUTPUT / "dft_opt"
     analysis_dir = DATA_OUTPUT / "analysis"
@@ -190,7 +273,7 @@ def main() -> None:
 
     all_channel_rows = []
     all_slopes = []
-    for mol_id in sorted(TEST_IDS):
+    for mol_id in sorted(ALL_IDS):
         mol = resolve_mol_name(mol_id, dft_opt_dir)
         if mol is None:
             print(f"-- mol_{mol_id.zfill(3)}: no directory, skipping")

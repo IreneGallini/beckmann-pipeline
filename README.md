@@ -129,6 +129,7 @@ python scripts/dft/parse_nbo.py    # -> data/output/analysis/nbo_e2pert.csv
 python scripts/dft/parse_cmo.py    # -> data/output/analysis/cmo_descriptors.csv  (Lambda, w17max, w78max, wCNmax)
 python scripts/dft/descriptors.py  # -> data/output/analysis/channel_descriptors.csv (Psi)
                                     #    data/output/analysis/descriptor_slopes.csv   (least-squares d/dR)
+python scripts/dft/parse_wiberg.py # -> data/output/analysis/bond_order_scan.csv (Wiberg C-C aryl/alkyl bond orders)
 ```
 
 `Lambda = w78max / max(w17max, 1e-3)` and `Psi = K_anti / (K_frag + epsilon)` are channel-resolved ratios (rearrangement-channel vs. fragmentation-channel), not unrestricted maxima — validated against an external reference log from the paper (`5_s0_Me.log`, compound 3) in `scripts/analysis/validate_reference_descriptors.py`.

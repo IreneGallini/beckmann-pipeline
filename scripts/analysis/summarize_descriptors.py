@@ -1,15 +1,25 @@
 """
 Summarize and plot the channel-resolved descriptors (Psi, Lambda, wCNmax,
-w17max, w78max) across the N-O scan for all 4 test molecules, for discussion
+w17max, w78max) across the N-O scan for the benchmark set, for discussion
 with a supervisor -- not part of the regular prediction pipeline.
 
 Produces:
   data/output/analysis/plots/{descriptor}.png  -- one plot per descriptor,
-      R(N-O) on the x-axis, one line per substrate, color-coded by
-      experimental outcome (R = rearrangement, F = fragmentation)
+      split into R-outcome / F-outcome side-by-side panels (not one shared
+      axes -- keeps each panel's line count manageable as the substrate
+      count grows toward 34), R(N-O) on the x-axis, direct-labeled by
+      substrate ID.
+  data/output/analysis/plots/wcnmax_grid.png    -- all substrates' wCNmax(R)
+      in one small-multiples figure (see beckmann.dft.viz.plot_wcnmax_grid),
+      the 'all N in one graph' comparison view.
   data/output/analysis/descriptor_summary.md   -- condensed table: d/dR for
       each descriptor per substrate, plus whether wCNmax shows an interior
-      extremum (the paper's central experimental/computational signature)
+      extremum (the paper's central experimental/computational signature).
+
+All data-loading logic (load_series(), find_wcnmax_extremum()) and the
+reusable per-molecule wCNmax figure (plot_wcnmax_single/grid) live in the
+beckmann package (beckmann.dft.descriptors / beckmann.dft.viz) -- this script
+is a thin caller, per CLAUDE.md's "logic lives in the package" convention.
 """
 import csv
 import json
@@ -18,12 +28,14 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 from beckmann.config import DATA_INPUT, DATA_OUTPUT
-from beckmann.dft.descriptors import resolve_series
+from beckmann.dft.descriptors import (
+    DESCRIPTORS, find_wcnmax_extremum, load_series,
+)
+from beckmann.dft.viz import OUTCOME_COLOR, plot_wcnmax_grid
 
 ANALYSIS_DIR = DATA_OUTPUT / "analysis"
 PLOTS_DIR    = ANALYSIS_DIR / "plots"
 
-DESCRIPTORS = ["psi", "log_lambda", "wcnmax", "w17max", "w78max"]
 LABELS = {
     "psi": "Ψ (Hyperconjugative Competition)",
     "log_lambda": "log₁₀(Λ)  (Frontier Dominance)",
@@ -31,11 +43,11 @@ LABELS = {
     "w17max": "w17max  (rearrangement channel)",
     "w78max": "w78max  (fragmentation channel)",
 }
-# Color still encodes experimental outcome (R vs F) rather than substrate identity --
-# with dozens of substrates eventually, a distinct hue per line stops scaling long
-# before a 2-color R/F split does. Individual lines are told apart by a direct label
-# at the endpoint instead (see main()), not by color.
-OUTCOME_COLOR = {"R": "tab:green", "F": "tab:red"}
+
+# Direct endpoint-labeling reads fine up to about this many lines on one
+# axes -- past it, the labels themselves become the crowding problem, so
+# fall back to letting the (still 2-entry) legend carry identity instead.
+MAX_DIRECT_LABELS = 10
 
 
 def _read_csv(path: Path) -> list[dict]:
@@ -43,54 +55,58 @@ def _read_csv(path: Path) -> list[dict]:
         return list(csv.DictReader(f))
 
 
-def _float_or_none(v):
-    if v in (None, "", "None"):
-        return None
-    return float(v)
+def _pct_of_outcome(meta: dict, outcome: str) -> float | None:
+    """% of whichever product the experimental outcome reports (pct_A for
+    'R', pct_B for 'F') -- the 'how decisive was this call' number used to
+    shade lines in plot_wcnmax_grid()."""
+    key = "pct_A" if outcome == "R" else "pct_B"
+    val = meta.get(key)
+    return float(val) if val not in (None, "", "None") else None
 
 
-def load_series(mol: str, channel_rows: list[dict]) -> tuple[list[float], dict[str, list[float | None]]]:
-    """R(N-O) values and per-descriptor y-values for the 5-point series, in SERIES_STAGES order."""
-    by_stage = {row["stage"]: row for row in channel_rows if row["mol"] == mol}
-    series = resolve_series(by_stage)
-    r_values = [float(row["r_no"]) for row in series]
-    y_by_descriptor = {d: [_float_or_none(row[d]) for row in series] for d in DESCRIPTORS}
-    return r_values, y_by_descriptor
+def _plot_descriptor_rf_split(descriptor: str, mols: list[str], per_mol_series: dict, outcomes: dict) -> None:
+    """One descriptor, R-outcome and F-outcome side by side -- halves the
+    line count per axes versus one shared plot, and keeps the R/F contrast
+    (the actual scientific question) as the organizing structure rather
+    than an afterthought color split."""
+    fig, (ax_r, ax_f) = plt.subplots(1, 2, figsize=(11, 4.5), sharey=True)
+    mols_by_outcome = {"R": [], "F": []}
+    for mol in mols:
+        mol_id = mol.split("_")[1]
+        outcome = outcomes[f"mol_{mol_id}"]["exp_outcome"]
+        mols_by_outcome.setdefault(outcome, []).append(mol)
 
+    for ax, outcome in [(ax_r, "R"), (ax_f, "F")]:
+        group = mols_by_outcome.get(outcome, [])
+        color = OUTCOME_COLOR.get(outcome, "gray")
+        label_all = len(group) <= MAX_DIRECT_LABELS
+        for mol in group:
+            r_values, y_by_descriptor = per_mol_series[mol]
+            pts = [(r, y) for r, y in zip(r_values, y_by_descriptor[descriptor]) if y is not None]
+            if not pts:
+                continue
+            pts.sort()
+            xs, ys = zip(*pts)
+            mol_id = mol.split("_")[1]
+            ax.plot(xs, ys, marker="o", markersize=6, linewidth=1.6, color=color)
+            if label_all:
+                ax.annotate(mol_id, (xs[-1], ys[-1]), xytext=(6, 0),
+                            textcoords="offset points", fontsize=8, color="dimgray", va="center")
+        if not label_all:
+            # Too many lines for direct labels to stay legible -- fall back
+            # to a plain count in the panel title instead of cramming text.
+            ax.text(0.02, 0.98, f"{len(group)} substrates", transform=ax.transAxes,
+                     fontsize=8, color="dimgray", va="top")
+        ax.set_xlabel("R(N-O)  (Å)")
+        ax.set_title(f"Outcome = {outcome}", fontsize=10)
 
-def find_wcnmax_extremum(mol: str, extraction_rows: list[dict]) -> dict | None:
-    """R_star/w_star/MO_index/epsilon_i_star at the interior wCNmax extremum, if any.
-
-    MO_index/epsilon_i_star are backfilled from cmo_channel_extraction.csv's 'cn'
-    channel rows (beckmann/dft/parse_cmo.py) rather than recomputed here -- that's
-    the only place which virtual MO achieved the max weight, and its orbital energy,
-    are actually recorded.
-    """
-    by_stage = {
-        r["stage"]: r for r in extraction_rows
-        if r["mol"] == mol and r["channel"] == "cn" and r["weight"] not in (None, "", "None")
-    }
-    rows = resolve_series(by_stage)
-    pts = [(float(r["R_NO"]), float(r["weight"]), r["MO_index"], r["epsilon_i_star"]) for r in rows]
-    if len(pts) < 3:
-        return None
-    pts.sort(key=lambda p: p[0])
-    for i in range(1, len(pts) - 1):
-        _, w_prev, _, _ = pts[i - 1]
-        r_cur, w_cur, mo_cur, eps_cur = pts[i]
-        _, w_next, _, _ = pts[i + 1]
-        if (w_cur < w_prev and w_cur < w_next) or (w_cur > w_prev and w_cur > w_next):
-            # depth = how far w_cur sits below (positive) or above (negative) the
-            # midpoint of its two neighbors -- the yes/no extremum flag alone can't
-            # tell a barely-there wobble from a deep collapse (see mol_014_Z vs
-            # mol_029_Z: both flag "yes", but 014's dip is ~4x deeper).
-            depth = (w_prev + w_next) / 2 - w_cur
-            return {
-                "R_star": r_cur, "w_star": w_cur, "MO_index": mo_cur,
-                "epsilon_i_star": float(eps_cur) if eps_cur not in (None, "", "None") else None,
-                "depth": depth,
-            }
-    return None
+    ax_r.set_ylabel(LABELS[descriptor])
+    fig.suptitle(f"{LABELS[descriptor]} vs. N-O distance", fontsize=12)
+    fig.tight_layout(rect=[0, 0, 1, 0.94])
+    out_path = PLOTS_DIR / f"{descriptor}.png"
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+    print(f"-- wrote {out_path}")
 
 
 def main() -> None:
@@ -104,62 +120,27 @@ def main() -> None:
 
     per_mol_series = {}
     extrema = {}
+    outcome_by_mol = {}
+    pct_by_mol = {}
     for mol in mols:
-        r_values, y_by_descriptor = load_series(mol, channel_rows)
-        per_mol_series[mol] = (r_values, y_by_descriptor)
+        per_mol_series[mol] = load_series(mol, channel_rows)
         extrema[mol] = find_wcnmax_extremum(mol, extraction_rows)
+        mol_id = mol.split("_")[1]
+        meta = outcomes[f"mol_{mol_id}"]
+        outcome_by_mol[mol] = meta["exp_outcome"]
+        pct_by_mol[mol] = _pct_of_outcome(meta, meta["exp_outcome"])
 
-    # ---- plots ----
+    # ---- per-descriptor exploration plots (R/F split) ----
     for descriptor in DESCRIPTORS:
-        fig, ax = plt.subplots(figsize=(6, 4.5))
-        seen_outcomes = set()
-        for mol in mols:
-            r_values, y_by_descriptor = per_mol_series[mol]
-            y_values = y_by_descriptor[descriptor]
-            pts = [(r, y) for r, y in zip(r_values, y_values) if y is not None]
-            if not pts:
-                continue
-            pts.sort()
-            xs, ys = zip(*pts)
-            mol_id = mol.split("_")[1]
-            outcome = outcomes[f"mol_{mol_id}"]["exp_outcome"]
-            color = OUTCOME_COLOR.get(outcome, "gray")
-            # One legend entry per outcome (R/F), not per molecule -- individual
-            # lines are identified by the direct label at their endpoint instead,
-            # so the legend stays 2 entries regardless of substrate count.
-            label = outcome if outcome not in seen_outcomes else None
-            seen_outcomes.add(outcome)
-            ax.plot(xs, ys, marker="o", markersize=7, linewidth=2, color=color, label=label)
-            # Direct label at the line's endpoint -- text token color (not the
-            # series color), per beckmann-dataviz: text never wears the data color.
-            ax.annotate(
-                mol_id, (xs[-1], ys[-1]), xytext=(6, 0), textcoords="offset points",
-                fontsize=8, color="dimgray", va="center",
-            )
-            # Mark the detected interior extremum and label its depth -- the
-            # yes/no flag in the summary table hides how deep the dip actually is
-            # (mol_014_Z vs mol_029_Z: both "yes", but 014's dip is ~4x deeper),
-            # so surface it directly on the one plot where it's diagnostic.
-            if descriptor == "wcnmax" and extrema.get(mol) is not None:
-                ex = extrema[mol]
-                ax.scatter(
-                    [ex["R_star"]], [ex["w_star"]], marker="D", s=70,
-                    facecolors="none", edgecolors=color, linewidths=2, zorder=5,
-                )
-                ax.annotate(
-                    f"Δ={ex['depth']:.3f}", (ex["R_star"], ex["w_star"]),
-                    xytext=(0, -12), textcoords="offset points",
-                    fontsize=7.5, color="dimgray", ha="center", va="top",
-                )
-        ax.set_xlabel("R(N-O)  (Å)")
-        ax.set_ylabel(LABELS[descriptor])
-        ax.set_title(f"{LABELS[descriptor]} vs. N-O distance")
-        ax.legend(title="outcome")
-        fig.tight_layout()
-        out_path = PLOTS_DIR / f"{descriptor}.png"
-        fig.savefig(out_path, dpi=150)
-        plt.close(fig)
-        print(f"-- wrote {out_path}")
+        _plot_descriptor_rf_split(descriptor, mols, per_mol_series, outcomes)
+
+    # ---- all-substrate wCNmax comparison grid ----
+    wcnmax_series = {mol: (per_mol_series[mol][0], per_mol_series[mol][1]["wcnmax"]) for mol in mols}
+    grid_fig = plot_wcnmax_grid(wcnmax_series, extrema, outcome_by_mol, pct_by_mol)
+    grid_path = PLOTS_DIR / "wcnmax_grid.png"
+    grid_fig.savefig(grid_path, dpi=150)
+    plt.close(grid_fig)
+    print(f"-- wrote {grid_path}")
 
     # ---- summary table ----
     lines = [
@@ -194,7 +175,7 @@ def main() -> None:
     mol_ids = ", ".join(f"mol_{mol.split('_')[1]}" for mol in mols)
     summary_path.write_text(
         f"# Descriptor summary ({mol_ids})\n\n"
-        "d/dR = least-squares slope over the 5-point N-O scan. "
+        "d/dR = least-squares slope over each molecule's N-O scan series. "
         "'wCNmax extremum' = interior local min/max in the wCNmax(R) series "
         "(the paper's central signature -- Table 2 reports this only for the one "
         "rearranging reference compound, none of the three fragmenting ones).\n\n"
