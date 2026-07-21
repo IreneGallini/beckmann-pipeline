@@ -46,7 +46,7 @@ diagnostic signature (clearly the dominant channel) in both cases.
 import numpy as np
 from pyscf import gto, lo
 
-from beckmann_alt.geometry import TEST_IDS, load_case, load_test_set_case
+from beckmann_alt.geometry import TEST_IDS, load_case, load_test_set_case, load_test_set_scan_series
 from beckmann_alt.pyscf_livvo import build_mol, run_scf, project_virtuals_onto_livvo
 
 
@@ -156,6 +156,31 @@ def run_test_set_case(mol_id: str) -> dict:
     """Any of the six main-pipeline test-set molecules (mol_002/006/014/020/021/029) --
     see beckmann_alt.geometry.load_test_set_case."""
     return run_from_case(load_test_set_case(mol_id))
+
+
+def run_test_set_scan_series(mol_id: str) -> list[dict]:
+    """wCNmax at every R(N-O) point of a test-set molecule's scan series
+    (beckmann_alt.geometry.load_test_set_scan_series) -- one PySCF SCF +
+    local per-atom-pair projection per point, not just the single
+    equilibrium geometry run_test_set_case() computes. Returns one row per
+    point shaped like a beckmann.dft.parse_cmo 'cn'-channel extraction row
+    (mol/stage/channel/R_NO/MO_index/weight/...) so
+    beckmann.dft.descriptors.find_wcnmax_minimum() can be called on the
+    result directly, reusing the main pipeline's own interior-minimum
+    criterion rather than reimplementing it here.
+    """
+    cases = load_test_set_scan_series(mol_id)
+    rows = []
+    for case in cases:
+        result = run_from_case(case)
+        cn = result["cn"]
+        rows.append({
+            "mol": case["name"], "stage": case["stage"], "channel": "cn",
+            "R_NO": case["r_no"], "MO_index": cn["mo_index"],
+            "epsilon_i_star": cn["epsilon"], "coefficient": cn["coefficient"],
+            "weight": cn["wmax"], "delta_lumo": None, "in_window": None,
+        })
+    return rows
 
 
 def _print_wcnmax(result: dict) -> None:

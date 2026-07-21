@@ -18,8 +18,11 @@ mol_002_E: our own pipeline, wB97XD/6-311+G(d,p), SMD/water -- fully known level
 """
 from pathlib import Path
 
-from beckmann.dft.inputs import TEST_IDS, resolve_mol_name
-from beckmann.dft.scan import ATOMIC_SYMBOLS, oxime_atom_map_from_gjf, parse_standard_orientations
+from beckmann.dft.inputs import STEP_SCAN_SOURCES, TEST_IDS, resolve_mol_name, step_scan_dir
+from beckmann.dft.parse_cmo import find_cmo_sections
+from beckmann.dft.scan import (
+    ATOMIC_SYMBOLS, no_distance, oxime_atom_map_from_gjf, parse_standard_orientations,
+)
 from beckmann.config import DATA_OUTPUT
 
 ROOT = Path(__file__).parent.parent
@@ -150,3 +153,121 @@ def load_test_set_case(mol_id: str) -> dict:
         "ci": ci, "ni": ni, "oi": oi,
         "basis_note": "our own pipeline's 6-311+G(d,p), all-electron -- exact match to config.py",
     }
+
+
+def atoms_before(lines: list[str], idx: int) -> list[tuple]:
+    """Atoms from the last 'Standard orientation' block before line idx --
+    the same anchor beckmann.dft.parse_nbo.r_no_before uses to tag a CMO/
+    E2PERT table with its R(N-O), but returning the full geometry instead of
+    just the N-O distance."""
+    so_blocks = [(i, atoms) for i, atoms in parse_standard_orientations(lines) if i < idx]
+    if not so_blocks:
+        return []
+    _, atoms = max(so_blocks, key=lambda x: x[0])
+    return atoms
+
+
+def _stage_points_from_log(log_path: Path, ni: int, oi: int) -> dict[float, list]:
+    """{r_no: atoms} for every CMO section in one stage log, keyed by the
+    N-O distance of the geometry it was computed on. Last table at a given R
+    wins (Stable=Opt prints a pre-optimization seed pass and a separate
+    post-optimization pass at the same frozen scan-point R -- see
+    beckmann.dft.parse_cmo.parse_log, which applies the identical rule to
+    the NBO data itself)."""
+    lines = log_path.read_text().splitlines()
+    atoms_by_r: dict[float, list] = {}
+    for start in find_cmo_sections(lines):
+        atoms = atoms_before(lines, start)
+        if not atoms:
+            continue
+        r_no = round(no_distance(atoms, ni, oi), 4)
+        atoms_by_r[r_no] = atoms
+    return atoms_by_r
+
+
+def _mol_stage_points(mol: str, mol_dir: Path, ni: int, oi: int) -> dict[str, list]:
+    """{stage_label: atoms} for the 'nbo' (R0) stage plus every 'scan_N'
+    rigid-scan point of a normal (non-STEP_SCAN_SOURCES) molecule."""
+    points: dict[str, list] = {}
+    nbo_log = mol_dir / f"{mol}_nbo.log"
+    if nbo_log.exists():
+        by_r = _stage_points_from_log(nbo_log, ni, oi)
+        if by_r:
+            (atoms,) = by_r.values()  # exactly one CMO table in _nbo.log
+            points["nbo"] = atoms
+
+    scan_log = mol_dir / f"{mol}_scan.log"
+    if scan_log.exists():
+        by_r = _stage_points_from_log(scan_log, ni, oi)
+        for point, r_no in enumerate(sorted(by_r), start=1):
+            points[f"scan_{point}"] = by_r[r_no]
+    return points
+
+
+def _mol_stage_points_stepscan(mol: str, mol_dir: Path, ni: int, oi: int) -> dict[str, list]:
+    """Same role as _mol_stage_points, but merges scan geometries from one or
+    more dft_opt_stepscan/ reruns (STEP_SCAN_SOURCES) instead of the
+    canonical, crashed _scan.log -- mirrors
+    beckmann.dft.parse_cmo.collect_molecule_stepscan, applied to geometries
+    instead of NBO data, so R(N-O) point identity matches the trusted series."""
+    points: dict[str, list] = {}
+    nbo_log = mol_dir / f"{mol}_nbo.log"
+    (atoms,) = _stage_points_from_log(nbo_log, ni, oi).values()
+    points["nbo"] = atoms
+
+    all_by_r: dict[float, list] = {}
+    for source in STEP_SCAN_SOURCES[mol]:
+        source_dir = step_scan_dir() / source
+        _, s_ni, s_oi, _ = oxime_atom_map_from_gjf(source_dir / f"{source}_opt.gjf")
+        all_by_r.update(_stage_points_from_log(source_dir / f"{source}_scan.log", s_ni, s_oi))
+
+    for point, r_no in enumerate(sorted(all_by_r), start=1):
+        points[f"scan_{point}"] = all_by_r[r_no]
+    return points
+
+
+def load_test_set_scan_series(mol_id: str) -> list[dict]:
+    """One 'case' dict (same shape as load_case()/load_test_set_case(), plus
+    'stage'/'r_no') per available R(N-O) point -- 'nbo' followed by every
+    'scan_N' -- for a main-pipeline test-set molecule. Lets the open-source
+    method be run across a full scan instead of just the equilibrium
+    geometry, using the same geometry-anchor convention and
+    STEP_SCAN_SOURCES merging the main pipeline's own descriptor extraction
+    (beckmann.dft.parse_cmo) uses, so point identity/R(N-O) values line up
+    with the trusted NBO7 series.
+    """
+    if mol_id not in TEST_IDS:
+        raise ValueError(f"{mol_id}: not in TEST_IDS ({sorted(TEST_IDS)})")
+    dft_opt_dir = DATA_OUTPUT / "dft_opt"
+    mol_name = resolve_mol_name(mol_id, dft_opt_dir)
+    if mol_name is None:
+        raise ValueError(f"mol_{mol_id}: no directory found under {dft_opt_dir}")
+
+    mol_dir = dft_opt_dir / mol_name
+    ci, ni, oi, _ = oxime_atom_map_from_gjf(mol_dir / f"{mol_name}_opt.gjf")
+
+    if mol_name in STEP_SCAN_SOURCES:
+        points = _mol_stage_points_stepscan(mol_name, mol_dir, ni, oi)
+    else:
+        points = _mol_stage_points(mol_name, mol_dir, ni, oi)
+
+    ordered_stages = ["nbo"] + sorted(
+        (s for s in points if s.startswith("scan_")), key=lambda s: int(s.split("_")[1])
+    )
+    cases = []
+    for stage in ordered_stages:
+        if stage not in points:
+            continue
+        atoms = points[stage]
+        cases.append({
+            "name": mol_name,
+            "stage": stage,
+            "r_no": round(no_distance(atoms, ni, oi), 4),
+            "atoms": atoms,
+            "atom_spec": pyscf_atom_spec(atoms),
+            "charge": CHARGE,
+            "spin": SPIN,
+            "ci": ci, "ni": ni, "oi": oi,
+            "basis_note": "our own pipeline's 6-311+G(d,p), all-electron -- exact match to config.py",
+        })
+    return cases
