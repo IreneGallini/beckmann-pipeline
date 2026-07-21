@@ -1,18 +1,14 @@
 """
-Local per-atom-pair construction for an open-source wCNmax analog, closer to NBO's
-actual Step 4 (see beckmann_alt/pyscf_livvo.py's module docstring for the reference-
-material breakdown) than LIVVO's single global SVD.
+Local per-atom-pair construction for an open-source wCNmax analog: instead of drawing
+from a pre-built global set of localized virtual orbitals, build a fresh, local
+subspace for each atom pair directly from that pair's own block of the density matrix
+(in a Löwdin-orthogonalized IAO basis) -- structurally the same operation as NBO's own
+per-atom-pair antibond search, just applied to one requested pair at a time.
 
-Scoped to wCNmax only. Earlier in this exploration this module also computed w17max/
-w78max (the rearrangement/fragmentation channels) and, after those turned out to
-collide with wCNmax's own winning orbital, an iterative-deflation follow-up aimed at
-fixing that collision. wCNmax is the actual predictive descriptor this project needs;
-w17max/w78max are secondary and were never the target of this prototype effort, so
-that code (and the collision it never fully resolved) has been dropped here rather than
-carried forward. Full history -- the LIVVO channel-identification collisions, the
-multi-candidate fix that got wCNmax right, and the deflation attempt for w17/w78 -- is
-preserved in `Notes_open_source_alt.md` and in this branch's git history
-(`git log -- beckmann_alt/pair_nbo.py`), not repeated here.
+Scoped to wCNmax only -- the actual predictive descriptor this project needs. Earlier
+exploration (LIVVO-based and crude-AO-projection channel identification, w17max/w78max,
+an iterative-deflation follow-up) is preserved in `Notes_open_source_alt.md` and in this
+branch's git history (`git log -- beckmann_alt/pair_nbo.py`), not repeated here.
 
 Construction:
   1. Build IAOs on the occupied space (pyscf.lo.iao.iao) and Löwdin-orthogonalize them
