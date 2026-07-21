@@ -327,10 +327,80 @@ generated yet — this one doesn't touch the methodology question since it's
 the molecule's first-ever scan attempt at default settings, same as every
 other substrate's initial try.
 
-**Current instruction (2026-07-20):** a summary of the above, including the
-mixed CalcFC results, has been sent to the supervisor along with the
-original methodology question (uniform-settings-per-molecule vs.
-per-point vs. dihedral-freeze vs. something else). mol_003_E, mol_020_E,
-and mol_034_E remain crashed and **should not get another fix attempt**
-until she responds — do not escalate to `NoGDIIS`/`MaxStep`/dihedral-freeze
-on these three without her input first.
+**Supervisor response (2026-07-20) — step-size shift, not stronger optimizer
+settings.** Rather than CalcFC/NoGDIIS/MaxStep, she suggested trying
+different scan step increments for the molecules still failing at pt5 —
+"another increments, say 0.7 or 0.4" (read as 0.07/0.04 Å, consistent with
+our 0.05 Å scale) — the idea being to sample R(N-O) points that land off the
+exact bond length where the ring-pucker double-well sits, rather than
+fighting the optimizer at that geometry.
+
+**Step-size test results (2026-07-20) — STATUS: RESOLVED for mol_020_E and
+mol_034_E, PARTIALLY RESOLVED for mol_003_E.** Generated via
+`prepare_scan_rigid(..., step=0.07/0.04, n_points=6)` in a new side-experiment
+directory `data/output/dft_opt_stepscan/{mol}_step07/` and `..._step04/`
+(same pattern as `dft_opt_631g/`, `dft_opt_finescan/` — copies of the
+molecule's `_opt.gjf`/`_opt.log`, original settings otherwise, no CalcFC).
+6 of 7 jobs succeeded:
+
+| Molecule | 0.07 Å step | 0.04 Å step |
+|---|---|---|
+| mol_003_E | ❌ crashed — same oscillation at pt5 (R0+0.35Å), segfaulted after 3h12m stuck there | ✅ **Normal termination**, all 6 points |
+| mol_020_E | ✅ **Normal termination**, all 6 points | ✅ **Normal termination**, all 6 points |
+| mol_034_E | ✅ **Normal termination**, all 6 points | ✅ **Normal termination**, all 6 points |
+
+So the ring-pucker degeneracy for mol_003_E sits close enough to the
+default-step R(N-O) sampling that a 0.07Å offset still lands on it, while
+0.04Å avoids it — a narrower miss than for mol_020_E/mol_034_E, where either
+offset cleared the problem. All logs downloaded to
+`data/output/dft_opt_stepscan/{mol}_step0{4,7}/`.
+
+**Consistency question — RESOLVED (2026-07-21).** Per the user's follow-up
+decision: mol_020_E and mol_034_E's two independently-successful scans
+(step07 and step04) are **merged into one denser per-molecule series**, not
+kept as two parallel rows — the scan's actual purpose is resolving whether
+wCNmax is monotonic or has an interior minimum, and combining every
+successfully-converged point is strictly better for that than picking one
+series and discarding the other's points. Implemented via
+`STEP_SCAN_SOURCES`/`build_stage_relabel_map()`/`relabel_rows()` in
+`beckmann/dft/inputs.py`: `parse_nbo.py`/`parse_cmo.py`/`parse_wiberg.py`'s
+`collect_molecule_stepscan()` pulls 'nbo' rows from the canonical
+`dft_opt/{mol}/{mol}_nbo.log` (Stage 2 succeeded independently of the Stage 3
+crash) and 'scan' rows from every listed `dft_opt_stepscan/` source, then
+renumbers the combined scan points as one `scan_1..scan_N` sequence sorted by
+actual R(N-O) — `resolve_series()`/`compute_slopes()` needed no changes,
+since they already just sort by the `scan_N` stage suffix regardless of
+count or spacing. Result: `mol_020_E` now has 13 points (1 nbo + 12 merged
+scan), `mol_034_E` has 12 (no nbo log ever run for it — see below),
+`mol_003_E` has 6 (step04 only, no merge needed).
+
+The original crashed logs (`dft_opt/mol_003_E/`, `dft_opt/mol_020_E/`,
+`dft_opt/mol_034_E/`, and the earlier uniform-CalcFC attempts) are left in
+place, untouched — not archived, not deleted — since they're still "the
+data," just not the series feeding the descriptor CSVs. Do not clean these up
+without a deliberate decision.
+
+**Unrelated data-completeness note found during this fix:** 28 of the 34
+benchmark substrates (everything outside the original 6-molecule `TEST_IDS`
+set) never had Stage 2 (`{mol}_nbo.log`, equilibrium NBO) run at all — only
+Stage 1 (`opt`) and Stage 3 (`scan`). This is a pre-existing gap, not
+introduced by anything above; `resolve_series()` already treats `nbo` as
+optional, so these molecules' series simply start at `scan_1` with no R0
+baseline point. Worth flagging for a future batch if the equilibrium point
+specifically (not just the stretched series) is ever needed for these 28.
+
+**Automated recovery now exists for this failure family** (see
+`CLAUDE.md`'s "Automated failure detection + recovery" section) —
+`beckmann/dft/log_diagnostics.py` classifies a log's failure mode
+programmatically, and `beckmann/dft/recovery.py` /
+`scripts/dft/auto_recover.py` automatically escalate an
+`OSCILLATING_DEGENERACY` classification through CalcFC → step=0.07 →
+step=0.04, fully automatically (including submission — an explicit product
+decision, not an oversight). Verified working end-to-end against Citadel on
+2026-07-21: `auto_recover.py --mol 020` and `--mol 003` both correctly
+detected the still-oscillating canonical scans and launched fresh
+`mol_020_E_calcfc`/`mol_003_E_calcfc` reruns; re-running immediately after
+correctly skipped via the in-flight check instead of double-submitting.
+Manual diagnosis via this file's playbook is still the right tool for any
+failure category the classifier reports as `SLOW_CONVERGENCE`/`NOISY_TRENDING`/
+`SEGFAULT`/`UNKNOWN` — those get no automated remediation attempt.

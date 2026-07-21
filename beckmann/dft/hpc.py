@@ -342,6 +342,28 @@ def cmd_status(config: dict, dry_run: bool, mol: str | None, local_dir: Path) ->
     run(["ssh", host, "ps aux | grep '[g]16' | awk '{print $1, $2, $11, $12}'"], dry_run)
 
 
+def cmd_diagnose(config: dict, dry_run: bool, mol: str | None, local_dir: Path) -> None:
+    """Local-only, no SSH -- classify every already-downloaded .log in scope
+    (opt/nbo/scan stages) via beckmann.dft.log_diagnostics.classify_scan().
+    Composes AFTER download in the usual upload -> submit-scan -> status ->
+    download cycle: status answers 'is it still running,' this answers 'did
+    it actually succeed, and if not, what kind of failure is it' -- something
+    cmd_status has never done (it only ever checked the remote process
+    table, never opened a log)."""
+    from beckmann.dft.log_diagnostics import FailureCategory, classify_scan
+
+    dirs = mol_dirs(local_dir, mol)
+    print(f"\n-- Diagnosing logs in {local_dir}/ ({', '.join(d.name for d in dirs)})")
+    for d in dirs:
+        diagnoses = classify_scan(d, d.name)
+        if not diagnoses:
+            print(f"  {d.name}: no stage logs downloaded yet")
+            continue
+        for diag in diagnoses:
+            flag = "" if diag.category == FailureCategory.NORMAL else "  <-- needs attention"
+            print(f"  {d.name:<28} {diag.stage:<6} {diag.category.value:<24}{flag}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="HPC sync tool for Gaussian DFT jobs.",
@@ -380,6 +402,7 @@ def main() -> None:
     sub.add_parser("submit-irc",     help="Submit IRC jobs — AFTER the matching TS job is verified")
     sub.add_parser("download",       help="Download *.log files from cluster")
     sub.add_parser("status",         help="Show running g16 processes on server")
+    sub.add_parser("diagnose",       help="Classify already-downloaded logs (local-only, no SSH) -- oscillating/slow/segfault/etc.")
 
     args = parser.parse_args()
 
@@ -401,6 +424,7 @@ def main() -> None:
         "submit-irc":     cmd_submit_irc,
         "download":       cmd_download,
         "status":         cmd_status,
+        "diagnose":       cmd_diagnose,
     }
     dispatch[args.command](config, args.dry_run, args.mol, local_dir)
 

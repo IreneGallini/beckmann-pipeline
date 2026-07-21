@@ -21,7 +21,10 @@ import re
 from pathlib import Path
 
 from beckmann.config import DATA_OUTPUT
-from beckmann.dft.inputs import TEST_IDS, resolve_mol_name
+from beckmann.dft.inputs import (
+    ALL_IDS, STEP_SCAN_SOURCES, build_stage_relabel_map, relabel_rows,
+    resolve_mol_name, step_scan_dir,
+)
 from beckmann.dft.scan import no_distance, oxime_indices_from_gjf, parse_standard_orientations
 
 TABLE_HEADER = "second order perturbation theory analysis"
@@ -138,6 +141,33 @@ def parse_log(log_path: Path, ni: int, oi: int) -> list[dict]:
     return rows
 
 
+def collect_stage(mol: str, mol_dir: Path, ni: int, oi: int, stage: str) -> list[dict] | None:
+    """Extract one stage's rows, requiring only that stage's own log (if
+    present) to have converged -- unlike collect_molecule(), which requires
+    every stage present in mol_dir to be clean. Returns [] if the log doesn't
+    exist, None if it exists but didn't reach Normal termination (a hard
+    failure the caller must decide how to handle)."""
+    log_path = mol_dir / f"{mol}_{stage}.log"
+    if not log_path.exists():
+        return []
+    if not log_terminated_normally(log_path):
+        return None
+
+    table_rows_by_r = {}
+    for row in parse_log(log_path, ni, oi):
+        table_rows_by_r.setdefault(row["r_no"], []).append(row)
+
+    rows = []
+    # _scan.log has one table per rigid-scan point disambiguate by order.
+    for point, (r_no, trows) in enumerate(sorted(
+        table_rows_by_r.items(), key=lambda kv: (kv[0] is None, kv[0])
+    ), start=1):
+        stage_label = f"{stage}_{point}" if len(table_rows_by_r) > 1 else stage
+        for row in trows:
+            rows.append({"mol": mol, "stage": stage_label, "r_no": r_no, **row})
+    return rows
+
+
 def collect_molecule(mol: str, mol_dir: Path) -> list[dict]:
     """Parse all available stage logs for one molecule, e.g. 'mol_002_E'.
 
@@ -148,33 +178,44 @@ def collect_molecule(mol: str, mol_dir: Path) -> list[dict]:
     """
     ni, oi, _ = oxime_indices_from_gjf(mol_dir / f"{mol}_opt.gjf")
 
-    bad_logs = [
-        p.name for stage in STAGES
-        if (p := mol_dir / f"{mol}_{stage}.log").exists() and not log_terminated_normally(p)
-    ]
-    if bad_logs:
-        print(f"   -- {mol}: {', '.join(bad_logs)} did not reach Normal termination "
-              f"-- skipping whole molecule (see JOB_ISSUES.md)")
-        return []
-
     all_rows = []
     for stage in STAGES:
-        log_path = mol_dir / f"{mol}_{stage}.log"
-        if not log_path.exists():
-            continue
-        table_rows_by_r = {}
-        for row in parse_log(log_path, ni, oi):
-            table_rows_by_r.setdefault(row["r_no"], []).append(row)
-
-        # _scan.log has one table per rigid-scan point disambiguate by order.
-        for point, (r_no, rows) in enumerate(sorted(
-            table_rows_by_r.items(), key=lambda kv: (kv[0] is None, kv[0])
-        ), start=1):
-            stage_label = f"{stage}_{point}" if len(table_rows_by_r) > 1 else stage
-            for row in rows:
-                all_rows.append({"mol": mol, "stage": stage_label, "r_no": r_no, **row})
-
+        rows = collect_stage(mol, mol_dir, ni, oi, stage)
+        if rows is None:
+            print(f"   -- {mol}: {mol}_{stage}.log did not reach Normal termination "
+                  f"-- skipping whole molecule (see JOB_ISSUES.md)")
+            return []
+        all_rows.extend(rows)
     return all_rows
+
+
+def collect_molecule_stepscan(mol: str, mol_dir: Path) -> list[dict]:
+    """For a molecule whose canonical Stage 3 scan crashed but has one or
+    more successful step-size reruns (STEP_SCAN_SOURCES, see inputs.py):
+    'nbo' rows come from the canonical mol_dir (Stage 2 equilibrium NBO
+    succeeded independently of the Stage 3 crash), 'scan' rows come from
+    each listed dft_opt_stepscan/ source, merged into one R-ordered series
+    under the canonical mol name -- see build_stage_relabel_map()."""
+    ni, oi, _ = oxime_indices_from_gjf(mol_dir / f"{mol}_opt.gjf")
+
+    nbo_rows = collect_stage(mol, mol_dir, ni, oi, "nbo")
+    if nbo_rows is None:
+        print(f"   -- {mol}: {mol}_nbo.log did not reach Normal termination -- skipping")
+        return []
+
+    all_scan_rows = []
+    for source in STEP_SCAN_SOURCES[mol]:
+        source_dir = step_scan_dir() / source
+        s_ni, s_oi, _ = oxime_indices_from_gjf(source_dir / f"{source}_opt.gjf")
+        rows = collect_stage(source, source_dir, s_ni, s_oi, "scan")
+        if rows is None:
+            print(f"   -- {mol}: {source}_scan.log did not reach Normal termination -- skipping this source")
+            continue
+        all_scan_rows.extend(rows)
+
+    relabel = build_stage_relabel_map({r["r_no"] for r in all_scan_rows})
+    scan_rows = relabel_rows(all_scan_rows, mol, relabel)
+    return nbo_rows + scan_rows
 
 
 def main() -> None:
@@ -183,13 +224,16 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     all_rows = []
-    for mol_id in sorted(TEST_IDS):
+    for mol_id in sorted(ALL_IDS):
         mol = resolve_mol_name(mol_id, dft_opt_dir)
         if mol is None:
             print(f"-- mol_{mol_id.zfill(3)}: no directory, skipping")
             continue
         mol_dir = dft_opt_dir / mol
-        rows = collect_molecule(mol, mol_dir)
+        if mol in STEP_SCAN_SOURCES:
+            rows = collect_molecule_stepscan(mol, mol_dir)
+        else:
+            rows = collect_molecule(mol, mol_dir)
         print(f"-- {mol}: {len(rows)} E2PERT rows")
         all_rows.extend(rows)
 

@@ -56,7 +56,10 @@ from pathlib import Path
 
 from beckmann.config import DATA_OUTPUT
 from beckmann.dft.descriptors import get_substituent_map
-from beckmann.dft.inputs import TEST_IDS, resolve_mol_name
+from beckmann.dft.inputs import (
+    ALL_IDS, STEP_SCAN_SOURCES, build_stage_relabel_map, relabel_rows,
+    resolve_mol_name, step_scan_dir,
+)
 from beckmann.dft.parse_nbo import STAGES, log_terminated_normally, r_no_before
 from beckmann.dft.scan import oxime_atom_map_from_gjf
 
@@ -255,6 +258,39 @@ def parse_log(log_path: Path, ci: int, ni: int, oi: int, c_aryl: int, c_alkyl: i
     return list(row_by_r.values())
 
 
+def collect_stage(mol: str, mol_dir: Path, ci: int, ni: int, oi: int, c_aryl: int, c_alkyl: int,
+                   stage: str) -> tuple[list[dict], list[dict]] | None:
+    """Extract one stage's rows, requiring only that stage's own log (if
+    present) to have converged -- see parse_nbo.collect_stage for the same
+    pattern. Returns ([], []) if the log doesn't exist, None if it exists but
+    didn't reach Normal termination."""
+    log_path = mol_dir / f"{mol}_{stage}.log"
+    if not log_path.exists():
+        return [], []
+    if not log_terminated_normally(log_path):
+        return None
+
+    rows = parse_log(log_path, ci, ni, oi, c_aryl, c_alkyl)
+    summary_rows = []
+    channel_rows = []
+    # _scan.log has one CMO table per rigid-scan point -- disambiguate by R(N-O) order.
+    for point, row in enumerate(
+        sorted(rows, key=lambda r: (r["r_no"] is None, r["r_no"])), start=1
+    ):
+        stage_label = f"{stage}_{point}" if len(rows) > 1 else stage
+        channels = row.pop("_channels")
+        summary_rows.append({"mol": mol, "stage": stage_label, **row})
+        for channel_name, (weight, mo_index, epsilon, coeff, delta_lumo, in_window) in channels.items():
+            channel_rows.append({
+                "mol": mol, "stage": stage_label, "channel": channel_name,
+                "R_NO": row["r_no"], "MO_index": mo_index,
+                "epsilon_i_star": epsilon, "coefficient": coeff, "weight": weight,
+                "delta_lumo": round(delta_lumo, 5) if delta_lumo is not None else None,
+                "in_window": in_window,
+            })
+    return summary_rows, channel_rows
+
+
 def collect_molecule(mol: str, mol_dir: Path, c_aryl: int, c_alkyl: int) -> tuple[list[dict], list[dict]]:
     """Compute descriptors for all available stage logs of one molecule, e.g. 'mol_002_E'.
 
@@ -267,40 +303,53 @@ def collect_molecule(mol: str, mol_dir: Path, c_aryl: int, c_alkyl: int) -> tupl
     """
     ci, ni, oi, _ = oxime_atom_map_from_gjf(mol_dir / f"{mol}_opt.gjf")
 
-    bad_logs = [
-        p.name for stage in STAGES
-        if (p := mol_dir / f"{mol}_{stage}.log").exists() and not log_terminated_normally(p)
-    ]
-    if bad_logs:
-        print(f"   -- {mol}: {', '.join(bad_logs)} did not reach Normal termination "
-              f"-- skipping whole molecule (see JOB_ISSUES.md)")
-        return [], []
-
     summary_rows = []
     channel_rows = []
     for stage in STAGES:
-        log_path = mol_dir / f"{mol}_{stage}.log"
-        if not log_path.exists():
-            continue
-        rows = parse_log(log_path, ci, ni, oi, c_aryl, c_alkyl)
-
-        # _scan.log has one CMO table per rigid-scan point -- disambiguate by R(N-O) order.
-        for point, row in enumerate(
-            sorted(rows, key=lambda r: (r["r_no"] is None, r["r_no"])), start=1
-        ):
-            stage_label = f"{stage}_{point}" if len(rows) > 1 else stage
-            channels = row.pop("_channels")
-            summary_rows.append({"mol": mol, "stage": stage_label, **row})
-            for channel_name, (weight, mo_index, epsilon, coeff, delta_lumo, in_window) in channels.items():
-                channel_rows.append({
-                    "mol": mol, "stage": stage_label, "channel": channel_name,
-                    "R_NO": row["r_no"], "MO_index": mo_index,
-                    "epsilon_i_star": epsilon, "coefficient": coeff, "weight": weight,
-                    "delta_lumo": round(delta_lumo, 5) if delta_lumo is not None else None,
-                    "in_window": in_window,
-                })
-
+        result = collect_stage(mol, mol_dir, ci, ni, oi, c_aryl, c_alkyl, stage)
+        if result is None:
+            print(f"   -- {mol}: {mol}_{stage}.log did not reach Normal termination "
+                  f"-- skipping whole molecule (see JOB_ISSUES.md)")
+            return [], []
+        s_rows, c_rows = result
+        summary_rows.extend(s_rows)
+        channel_rows.extend(c_rows)
     return summary_rows, channel_rows
+
+
+def collect_molecule_stepscan(mol: str, mol_dir: Path, c_aryl: int, c_alkyl: int) -> tuple[list[dict], list[dict]]:
+    """Merge one or more successful step-size reruns with the canonical
+    equilibrium NBO -- see parse_nbo.collect_molecule_stepscan for the same
+    pattern (this mirrors it for the CMO summary + channel-extraction rows,
+    which must stay consistently renumbered with each other)."""
+    ci, ni, oi, _ = oxime_atom_map_from_gjf(mol_dir / f"{mol}_opt.gjf")
+
+    nbo_result = collect_stage(mol, mol_dir, ci, ni, oi, c_aryl, c_alkyl, "nbo")
+    if nbo_result is None:
+        print(f"   -- {mol}: {mol}_nbo.log did not reach Normal termination -- skipping")
+        return [], []
+    nbo_summary, nbo_channel = nbo_result
+
+    all_summary = []
+    all_channel = []
+    for source in STEP_SCAN_SOURCES[mol]:
+        source_dir = step_scan_dir() / source
+        s_ci, s_ni, s_oi, _ = oxime_atom_map_from_gjf(source_dir / f"{source}_opt.gjf")
+        result = collect_stage(source, source_dir, s_ci, s_ni, s_oi, c_aryl, c_alkyl, "scan")
+        if result is None:
+            print(f"   -- {mol}: {source}_scan.log did not reach Normal termination -- skipping this source")
+            continue
+        s_rows, c_rows = result
+        all_summary.extend(s_rows)
+        all_channel.extend(c_rows)
+
+    # Relabel using the SUMMARY rows' r_no as the authoritative point set --
+    # channel rows must use the exact same mapping so a given point's summary
+    # and channel-detail rows stay under the same renumbered stage label.
+    relabel = build_stage_relabel_map({r["r_no"] for r in all_summary})
+    summary_rows = relabel_rows(all_summary, mol, relabel)
+    channel_rows  = relabel_rows(all_channel, mol, relabel, r_no_key="R_NO")
+    return nbo_summary + summary_rows, nbo_channel + channel_rows
 
 
 def main() -> None:
@@ -311,14 +360,17 @@ def main() -> None:
 
     all_rows = []
     all_channel_rows = []
-    for mol_id in sorted(TEST_IDS):
+    for mol_id in sorted(ALL_IDS):
         mol = resolve_mol_name(mol_id, dft_opt_dir)
         if mol is None:
             print(f"-- mol_{mol_id.zfill(3)}: no directory, skipping")
             continue
         mol_dir = dft_opt_dir / mol
         subst = get_substituent_map(mol, mol_dir)
-        rows, channel_rows = collect_molecule(mol, mol_dir, subst["c_aryl"], subst["c_alkyl"])
+        if mol in STEP_SCAN_SOURCES:
+            rows, channel_rows = collect_molecule_stepscan(mol, mol_dir, subst["c_aryl"], subst["c_alkyl"])
+        else:
+            rows, channel_rows = collect_molecule(mol, mol_dir, subst["c_aryl"], subst["c_alkyl"])
         print(f"-- {mol} (aryl=C{subst['c_aryl']}, alkyl=C{subst['c_alkyl']}): {len(rows)} stage points")
         for row in sorted(rows, key=lambda r: r["stage"]):
             lambda_str = f"{row['lambda']:.4f}" if row["lambda"] is not None else "None"

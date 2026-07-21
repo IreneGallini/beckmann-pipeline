@@ -19,8 +19,40 @@ from beckmann.config import (
 )
 from beckmann.dft.geometry import displace_leaving_group
 
-TEST_IDS  = {"002", "006", "020", "021", "014", "029"}
+TEST_IDS  = {"002", "006", "020", "021", "014", "029"}  # original test-set subset, kept for fast iteration
 OXIME_PAT = Chem.MolFromSmarts('[C:1]=[N:2]-[O+:3]')
+
+
+def _all_ids() -> set[str]:
+    """Numeric IDs for every substrate in the benchmark set (e.g. '001'..'034'),
+    derived from benchmark_meta.json rather than hand-maintained, so scope
+    tracks the benchmark set instead of drifting from it."""
+    import json
+    from beckmann.config import DATA_INPUT
+    meta = json.loads((DATA_INPUT / "benchmark_meta.json").read_text())
+    return {key.split("_")[1] for key in meta}
+
+
+ALL_IDS = _all_ids()
+
+# Three molecules whose canonical dft_opt/{mol}/{mol}_scan.gjf is a crashed
+# Stage 3 attempt (see JOB_ISSUES.md, 2026-07-20 entries) but which have one
+# or more successful reruns at a different scan step size, living as sibling
+# directories under dft_opt_stepscan/. mol_020_E and mol_034_E succeeded at
+# *both* listed step sizes -- both are kept and merged into one denser
+# per-molecule series (see merge_scan_rows()/build_stage_relabel_map() below)
+# rather than picking one as canonical, since the scan's purpose is resolving
+# whether wCNmax is monotonic or has an interior minimum, and more points is
+# strictly better for that. mol_003_E only has one successful rerun (step04).
+STEP_SCAN_SOURCES: dict[str, list[str]] = {
+    "mol_003_E": ["mol_003_E_step04"],
+    "mol_020_E": ["mol_020_E_step07", "mol_020_E_step04"],
+    "mol_034_E": ["mol_034_E_step07", "mol_034_E_step04"],
+}
+
+
+def step_scan_dir() -> Path:
+    return DATA_OUTPUT / "dft_opt_stepscan"
 
 
 def resolve_mol_name(mol_id: str, dft_opt_dir: Path) -> str | None:
@@ -28,6 +60,35 @@ def resolve_mol_name(mol_id: str, dft_opt_dir: Path) -> str | None:
     'mol_014_Z') -- the AIMNet2-lower-energy isomer isn't always E."""
     matches = sorted(dft_opt_dir.glob(f"mol_{mol_id.zfill(3)}_*"))
     return matches[0].name if matches else None
+
+
+def build_stage_relabel_map(r_no_values: set) -> dict:
+    """Map each unique (rounded) r_no to a fresh 'scan_i' label, i=1.. in
+    ascending R order -- used to renumber scan-point rows collected from
+    more than one source log (e.g. mol_020_E's step07 + step04 reruns) into
+    one coherent series. 'nbo' (R0) rows aren't included -- they pass
+    through unrenumbered since there's exactly one baseline point."""
+    ordered = sorted(r for r in r_no_values if r is not None)
+    return {r: f"scan_{i}" for i, r in enumerate(ordered, start=1)}
+
+
+def relabel_rows(rows: list[dict], mol_name: str, relabel: dict,
+                  stage_key: str = "stage", r_no_key: str = "r_no") -> list[dict]:
+    """Rewrite every row's mol field to mol_name; rows whose stage_key is
+    'nbo' pass through as-is (relabeled mol only), everything else gets its
+    stage_key rewritten via relabel (a build_stage_relabel_map() result,
+    keyed by rounded r_no) so scan points collected from multiple source
+    logs land as one 'scan_1'..'scan_N' sequence sorted by actual R(N-O).
+    r_no_key lets callers point at a differently-cased/named R(N-O) field
+    (e.g. parse_cmo.py's channel-extraction rows use 'R_NO', not 'r_no')."""
+    out = []
+    for row in rows:
+        if row[stage_key] == "nbo":
+            out.append({**row, "mol": mol_name})
+            continue
+        key = round(row[r_no_key], 4) if row[r_no_key] is not None else None
+        out.append({**row, "mol": mol_name, stage_key: relabel[key]})
+    return out
 
 
 # ── three-stage opt workflow ────────────────────────────────────────────────────
