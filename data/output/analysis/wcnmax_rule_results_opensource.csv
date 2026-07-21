@@ -1,0 +1,7 @@
+mol,n_points,minimum_found,R_star,depth,predicted,exp_outcome,agreement,trusted_minimum_found,trusted_predicted,trusted_agreement,matches_trusted_prediction
+mol_002_E,7,True,1.6592,0.0019,R,F,no,True,R,no,yes
+mol_006_E,7,False,,,F,R,no,True,R,yes,no
+mol_014_Z,7,True,1.6534,0.0972,R,F,no,True,R,no,yes
+mol_020_E,13,True,1.6429,0.0757,R,R,yes,True,R,yes,yes
+mol_021_E,7,True,1.6033,0.0270,R,R,yes,True,R,yes,yes
+mol_029_Z,7,True,1.6566,0.0606,R,R,yes,True,R,yes,yes
