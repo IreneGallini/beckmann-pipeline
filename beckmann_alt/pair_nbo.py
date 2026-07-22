@@ -120,6 +120,85 @@ def local_pair_antibonds(
     }
 
 
+def deflated_density_matrix(
+    dm_ao: np.ndarray, s: np.ndarray, iaos_orth: np.ndarray, atom_of_iao: np.ndarray,
+    deflate_pairs: list[tuple[int, int]],
+) -> np.ndarray:
+    """Diagnostic-2 addition (Notes_open_source_alt.md, "wCNmax: PySCF vs NBO7"):
+    approximates NBO7's own sequential whole-molecule deflation, scoped to just the
+    bonds chemically adjacent to the target pair rather than every bond in the
+    molecule. For each (atom_a, atom_b) in deflate_pairs, in order: build that pair's
+    own local IAO block from the CURRENT (already partly deflated) density matrix,
+    take its single highest-occupation eigenvector as that bond's 'claimed' bonding
+    orbital, and subtract its density contribution (occ * outer(orb, orb), same plain
+    S-normalized-MO convention pair_density_matrix uses -- no extra S factors needed
+    since iaos_orth/local_iaos are already S-orthonormal) before moving to the next
+    pair. Returns a new density matrix; the input is not mutated.
+    """
+    dm = dm_ao.copy()
+    for atom_a, atom_b in deflate_pairs:
+        a0, b0 = atom_a - 1, atom_b - 1
+        local_idx = np.where((atom_of_iao == a0) | (atom_of_iao == b0))[0]
+        if len(local_idx) < 2:
+            continue
+        local_iaos = iaos_orth[:, local_idx]
+        dm_local = local_iaos.T @ s @ dm @ s @ local_iaos
+        occupations, evecs = np.linalg.eigh(dm_local)
+        bonding_ao = local_iaos @ evecs[:, -1]  # highest-occupation eigenvector, ~2.0
+        dm = dm - occupations[-1] * np.outer(bonding_ao, bonding_ao)
+    return dm
+
+
+def local_pair_antibonds_deflated(
+    mf, s: np.ndarray, iaos_orth: np.ndarray, atom_of_iao: np.ndarray, atom_a: int, atom_b: int,
+    deflate_pairs: list[tuple[int, int]],
+) -> dict:
+    """Same as local_pair_antibonds(), but diagonalizes the target pair's local block
+    against a density matrix that's already had deflate_pairs' own bonding density
+    projected out (see deflated_density_matrix) -- the direct analog of NBO's real
+    sequential per-pair construction, applied to just the pair(s) adjacent to the
+    target instead of the whole molecule."""
+    a0, b0 = atom_a - 1, atom_b - 1
+    local_idx = np.where((atom_of_iao == a0) | (atom_of_iao == b0))[0]
+    if len(local_idx) < 2:
+        raise ValueError(f"atoms {atom_a}/{atom_b}: fewer than 2 IAOs found -- can't form a pair block")
+
+    dm_ao = pair_density_matrix(mf)
+    dm_deflated = deflated_density_matrix(dm_ao, s, iaos_orth, atom_of_iao, deflate_pairs)
+    local_iaos = iaos_orth[:, local_idx]
+    dm_local = local_iaos.T @ s @ dm_deflated @ s @ local_iaos
+
+    occupations, evecs = np.linalg.eigh(dm_local)
+    n_candidates = max(1, int(np.searchsorted(occupations, ANTIBOND_OCC_THRESHOLD)))
+    candidates_ao = [local_iaos @ evecs[:, k] for k in range(n_candidates)]
+
+    return {
+        "candidates_ao": candidates_ao,
+        "candidate_occupations": occupations[:n_candidates],
+        "bond_occupation": occupations[-1],
+        "n_local_iaos": len(local_idx),
+        "all_occupations": occupations,
+    }
+
+
+def compute_wcnmax_deflated(
+    mf, s: np.ndarray, iaos_orth: np.ndarray, atom_of_iao: np.ndarray, ci: int, ni: int,
+    deflate_pairs: list[tuple[int, int]],
+) -> dict:
+    pair = local_pair_antibonds_deflated(mf, s, iaos_orth, atom_of_iao, ci, ni, deflate_pairs)
+    best = None
+    for occ, vec in zip(pair["candidate_occupations"], pair["candidates_ao"]):
+        proj = project_virtuals_onto_livvo(mf, s, vec)
+        if best is None or proj["weight"] > best["weight"]:
+            best = {**proj, "antibond_occupation": occ}
+    return {
+        "pair": pair,
+        "wmax": best["weight"], "mo_index": best["mo_index"],
+        "epsilon": best["epsilon"], "coefficient": best["coefficient"],
+        "antibond_occupation": best["antibond_occupation"],
+    }
+
+
 def compute_wcnmax(mf, s: np.ndarray, iaos_orth: np.ndarray, atom_of_iao: np.ndarray, ci: int, ni: int) -> dict:
     pair = local_pair_antibonds(mf, s, iaos_orth, atom_of_iao, ci, ni)
     best = None
