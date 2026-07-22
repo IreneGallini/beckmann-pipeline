@@ -285,9 +285,8 @@ under-detects two false ones. Not enough molecules yet to call this a real speci
 advantage rather than coincidence.
 
 Output: `data/output/analysis/wcnmax_rule_results_opensource.csv` (17 rows, one per
-molecule tested so far -- `trusted_*`/`matches_trusted_prediction` columns carry the
-NBO7-side comparison for each) and `wcnmax_channel_extraction_opensource.csv` (114
-per-point rows: 48 from the original 6 + 66 from these 11). Visualized in
-`data/output/analysis/plots/wcnmax_opensource_vs_nbo7_agreement.png`
-(`beckmann_alt/plot_agreement_grid.py`) -- a per-molecule grid showing which method (if
-either) got each substrate right.
+molecule tested so far -- `exp`/`NBO`/`PySCF` columns hold each side's predicted R/F
+label directly, side by side; `NBO_correct`/`PySCF_correct`/`NBO_PySCF_match` carry the
+derived comparisons; `n_points`/`R_star`/`R_depth` -- PySCF's own scan diagnostics --
+are the last three columns) and `wcnmax_channel_extraction_opensource.csv` (114
+per-point rows: 48 from the original 6 + 66 from these 11).

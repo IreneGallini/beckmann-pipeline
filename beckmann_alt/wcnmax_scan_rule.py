@@ -28,8 +28,9 @@ Output:
     'cn'-channel rows, same shape as beckmann.dft.parse_cmo's trusted
     cmo_channel_extraction.csv)
   data/output/analysis/wcnmax_rule_results_opensource.csv (condensed
-    per-molecule result: exp_outcome/nbo_predicted/pyscf_predicted side by
-    side, plus nbo_*/pyscf_* agreement and diagnostic columns)
+    per-molecule result: exp/NBO/PySCF predicted R/F labels side by side,
+    correctness/cross-method-match columns, then n_points/R_star/R_depth
+    -- PySCF's own scan diagnostics -- as the last three columns)
 """
 import csv
 import json
@@ -46,10 +47,10 @@ EXTRACTION_FIELDS = [
     "weight", "delta_lumo", "in_window",
 ]
 RESULTS_FIELDS = [
-    "mol", "exp_outcome", "nbo_predicted", "pyscf_predicted",
-    "nbo_agreement", "pyscf_agreement", "pyscf_matches_nbo",
-    "nbo_minimum_found", "pyscf_minimum_found",
-    "pyscf_n_points", "pyscf_R_star", "pyscf_depth",
+    "mol", "exp", "NBO", "PySCF",
+    "NBO_correct", "PySCF_correct", "NBO_PySCF_match",
+    "NBO_minimum_found", "PySCF_minimum_found",
+    "n_points", "R_star", "R_depth",
 ]
 
 
@@ -91,14 +92,14 @@ def main() -> None:
 
         trusted = trusted_row(mol_name)
         result_rows.append({
-            "mol": mol_name, "exp_outcome": exp,
-            "nbo_predicted": trusted["predicted"], "pyscf_predicted": predicted,
-            "nbo_agreement": trusted["agreement"], "pyscf_agreement": agreement,
-            "pyscf_matches_nbo": "yes" if predicted == trusted["predicted"] else "no",
-            "nbo_minimum_found": trusted["minimum_found"], "pyscf_minimum_found": minimum is not None,
-            "pyscf_n_points": len(rows),
-            "pyscf_R_star": f"{minimum['R_star']:.4f}" if minimum else "",
-            "pyscf_depth": f"{minimum['depth']:.4f}" if minimum else "",
+            "mol": mol_name, "exp": exp,
+            "NBO": trusted["predicted"], "PySCF": predicted,
+            "NBO_correct": trusted["agreement"], "PySCF_correct": agreement,
+            "NBO_PySCF_match": "yes" if predicted == trusted["predicted"] else "no",
+            "NBO_minimum_found": trusted["minimum_found"], "PySCF_minimum_found": minimum is not None,
+            "n_points": len(rows),
+            "R_star": f"{minimum['R_star']:.4f}" if minimum else "",
+            "R_depth": f"{minimum['depth']:.4f}" if minimum else "",
         })
 
         print(

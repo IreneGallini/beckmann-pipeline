@@ -1,4 +1,4 @@
-mol,exp_outcome,nbo_predicted,pyscf_predicted,nbo_agreement,pyscf_agreement,pyscf_matches_nbo,nbo_minimum_found,pyscf_minimum_found,pyscf_n_points,pyscf_R_star,pyscf_depth
+mol,exp,NBO,PySCF,NBO_correct,PySCF_correct,NBO_PySCF_match,NBO_minimum_found,PySCF_minimum_found,n_points,R_star,R_depth
 mol_002_E,F,R,R,no,no,yes,True,True,7,1.6592,0.0019
 mol_006_E,R,R,F,yes,no,no,True,False,7,,
 mol_014_Z,F,R,R,no,no,yes,True,True,7,1.6534,0.0972
