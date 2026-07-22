@@ -198,91 +198,30 @@ shared call happens to be wrong. Output: `data/output/analysis/wcnmax_rule_resul
 (per-molecule) and `wcnmax_channel_extraction_opensource.csv` (per-point, all 6
 molecules, 48 rows total).
 
-## mol_006_E follow-up: the same "coarse scan misses the minimum" failure, one level finer
+## mol_006_E follow-up: interior minimum invisible at 0.05 Å resolution
 
-mol_006_E is the molecule whose *trusted* NBO7 scan originally needed a finer 0.05 A
-rerun to reveal its wCNmax minimum at all -- the original 0.1 A/5-point grid stepped
-directly over it (see the scope-decision note near the top of this file and Notes.md).
-The open-source method's standard series above already runs at that same promoted
-0.05 A resolution (7 points, `nbo` + `scan_1`..`scan_6`, R=1.5108-1.8108) and still
-shows no minimum -- smooth and monotonically increasing across NBO7's entire dip region
-(`data/output/analysis/plots/mol006_opensource_vs_nbo7_wcnmax.png`, first version).
+mol_006_E is the one molecule (of the original 6) where the open-source series
+disagrees with NBO7 on whether a genuine interior wCNmax minimum exists at all: NBO7
+finds one (depth 0.1010, R=1.6608, predicting rearrangement, matching experiment); the
+open-source series (7 points, `nbo` + `scan_1`..`scan_6`, the same standard 0.05 Å
+resolution used everywhere else) is smooth and monotonically increasing across NBO7's
+entire dip region -- no minimum
+(`data/output/analysis/plots/mol006_opensource_vs_nbo7_wcnmax.png`).
 
-Following the same instinct that fixed the NBO7 side originally: added 8 more points at
-0.01 A resolution across R=1.6108-1.7108 A (the window bracketing NBO7's dip), built via
-`beckmann_alt.geometry.interpolate_case()` -- a linear Cartesian blend between two
-already-converged scan-point geometries, **not** an independently DFT-relaxed structure
-at the new R (no new Gaussian/Citadel jobs; see that function's docstring for the
-caveat). Result: a real interior minimum appears at **R=1.6408, wCNmax=0.4313, depth
-0.0184** (`find_wcnmax_minimum`-style: neighbors 0.4495/0.4500) -- invisible at 0.05 A
-spacing, exactly like NBO7's own history with this molecule. Updated plot (now marking
-0.05 A scan points as filled circles and 0.01 A interpolated points as open triangles):
-same PNG path above. Merged 15-point series saved to
-`data/output/analysis/wcnmax_channel_extraction_opensource_mol006_interp.csv` (NOT
-merged into the main `wcnmax_channel_extraction_opensource.csv`, which stays consistent
-at 0.05 A across all 6 molecules for a fair rule comparison -- this is a separate,
-targeted follow-up).
-
-### Why the open-source dip is much shallower than NBO7's: root-caused, not just observed
-
-Both methods' winning-MO trajectory switches canonical-MO identity across this exact R
-window, one MO index apart (the same systematic offset as everywhere else in this
-project):
-
-| | R=1.6108/1.6108 (before) | at the crossing | R=1.7108/1.6608->1.7108 (after) |
-|---|---|---|---|
-| **NBO7** (`cmo_channel_extraction.csv`) | MO44, coeff=-0.653 | **MO45, coeff=0.571** (R=1.6608) | MO45, coeff=-0.654 |
-| **Open-source** (candidate diagnostics) | MO43, coeff=+0.671 | **MO44, coeff=+0.657** (R=1.6408) | MO44, coeff=+0.671 |
-
-Re-ran the open-source calculation at R=1.6308/1.6408/1.6508/1.6608 keeping the FULL
-local-antibond candidate diagnostics (`beckmann_alt/_compute_interp_diagnostics.py`,
-every eigenvector below `ANTIBOND_OCC_THRESHOLD`, not just the winner) instead of only
-the final wCNmax number. The winning candidate (occupation always ~0.20, the same
-local eigenvector throughout) is confirmed to be the SAME physical object across the
-whole window -- what changes is which canonical MO it projects onto most strongly:
-MO43 for R<=1.6308, MO44 for R>=1.6408, with R=1.6408 itself sitting right at the
-handoff (its own projection onto MO43 -- the runner-up candidate row in the
-diagnostics -- drops to 0.4094 at the same point, confirming both sides of the
-crossing are captured, not just the winner switching labels).
-
-**This is a real, physical avoided-crossing signature in the open-source method too --
-not a resolution artifact and not noise.** But it is a far more muted version of the
-same event:
-- **NBO7's mixing coefficient swings by ~0.082** at the crossing (|0.653| -> |0.571| ->
-  |0.654|, i.e. its BD* trades ~12% of its magnitude between the two canonical MOs).
-- **Open-source's swings by only ~0.014** (0.671 -> 0.657 -> 0.671, ~2%).
-- Ratio: **~5.5-5.9x** (consistent whether measured via wmax-depth, 0.1010/0.0184=5.49,
-  or via the raw coefficient swing, 0.082/0.014=5.9) -- both quantifications agree
-  closely, so this isn't an artifact of one particular way of measuring "depth."
-
-**Interpretation:** the crossing itself -- two canonical MOs trading CN-antibond
-character as N-O stretches -- is a real feature of the underlying electronic structure
-that both methods' SCF calculations reproduce, at essentially the same R (one MO index
-apart, the same systematic offset seen everywhere else) and same qualitative shape.
-What differs is how sharply the METHOD's own antibond target vector responds to it.
-NBO7's real BD* is built by NBO's actual algorithm: an iterative, whole-molecule
-Lewis-structure search that deflates (subtracts) already-accepted bonding density
-before searching each new atom pair, producing a antibond that is by construction
-sharply, almost purely two-center-localized. `beckmann_alt/pair_nbo.py`'s local
-construction builds its candidate directly from the RAW density matrix restricted to
-just the two atoms' IAOs, with no deflation of the rest of the molecule's bonding (the
-limitation already flagged in the "Second follow-up"/"Third follow-up" sections above)
--- so it retains some background coupling to virtual MOs beyond just the crossing pair,
-and never commits as completely to either side of the crossing. A target vector that's
-already "spread" across more of the virtual manifold has less room left to swing when
-two specific MOs exchange character, which is exactly the muted-but-real signature
-observed here. This also fits the already-documented systematic pattern (open-source
-wCNmax running ~5-6% HIGH everywhere, "Fourth check" above): away from any crossing, a
-less sharply-localized target still finds *some* single dominant MO to project onto
-(here, apparently more so than NBO7's own baseline) even though its response to a real
-crossing is comparatively damped.
-
-**Bottom line**: the open-source method's shallower dip is not evidence the crossing
-isn't real for this molecule -- both methods place it at the same R (within the known
-1-MO-index/5-6% systematic offset) -- but the local, non-deflated per-atom-pair
-construction structurally understates how sharp it is, by roughly a factor of 5-6x in
-this one case. Whether that factor generalizes to other substrates' crossings is not
-yet tested here.
+**Decision: only directly-computed geometries are used for any comparison in this
+project** -- an earlier pass tried probing this gap with interpolated intermediate
+geometries (linear Cartesian blends between two real converged scan points, not
+independently DFT-relaxed structures) at finer resolution around NBO7's dip, and found
+a real-looking but much shallower/narrower secondary dip plus a plausible root cause
+(the local, non-deflated per-atom-pair antibond construction responding to the same
+underlying canonical-MO crossing far more mutedly than NBO7's own whole-molecule-
+deflated BD*, ~5-6x muted specifically). That interpolation-based code and its
+generated CSV have been removed (`beckmann_alt.geometry.interpolate_case`,
+`_compute_interp_point.py`, `_compute_interp_diagnostics.py`,
+`wcnmax_channel_extraction_opensource_mol006_interp.csv`) since results built on
+non-relaxed geometries aren't a substitute for genuinely re-running the DFT scan at a
+finer step -- available via `git log -- beckmann_alt/` for the full writeup and numbers
+if this is revisited with real (Citadel-computed) finer-resolution geometries instead.
 
 ## Expansion: 11 more F-labeled molecules (specificity check)
 
@@ -338,9 +277,10 @@ mol_011_E right where open-source doesn't; open-source gets mol_016_E and mol_01
 where NBO7 doesn't. The earlier 6-molecule sample (50% vs. 67%) made the open-source
 method look meaningfully worse -- that gap was mostly small-sample noise, not a
 consistent deficit. mol_016_E/mol_018_E are specific cases where NBO7 finds a spurious
-minimum and the open-source method's structurally muted response to orbital crossings
-(the "Why the open-source dip is much shallower" section above) happens to avoid picking
-it up -- the same mechanism that under-detects mol_006_E's real minimum here correctly
+minimum and the open-source method's generally muted response to sharp features
+(the local, non-deflated per-atom-pair construction's own systematic understating of
+these dips/crossings -- see the mol_006_E follow-up above) happens to avoid picking it
+up -- the same tendency that under-detects mol_006_E's real minimum here correctly
 under-detects two false ones. Not enough molecules yet to call this a real specificity
 advantage rather than coincidence.
 

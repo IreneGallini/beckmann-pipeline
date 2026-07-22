@@ -40,8 +40,8 @@ def main() -> None:
     n = len(mols)
     x = list(range(n))
 
-    os_correct = [r["agreement"] == "yes" for r in rows]
-    nbo7_correct = [r["trusted_agreement"] == "yes" for r in rows]
+    os_correct = [r["pyscf_agreement"] == "yes" for r in rows]
+    nbo7_correct = [r["nbo_agreement"] == "yes" for r in rows]
 
     fig, ax = plt.subplots(figsize=(max(9, n * 0.75), 3.6))
 
@@ -52,7 +52,7 @@ def main() -> None:
     if n_f < n:
         ax.axvspan(n_f - 0.5, n - 0.5, color="1.0", zorder=0)
 
-    for row_y, label, correct in [(1, "NBO7 (trusted)", nbo7_correct), (0, "Open-source", os_correct)]:
+    for row_y, label, correct in [(1, "NBO7 (trusted)", nbo7_correct), (0, "PySCF", os_correct)]:
         for xi, ok in zip(x, correct):
             color = COLOR_CORRECT if ok else COLOR_INCORRECT
             marker = "o" if ok else "x"
@@ -62,7 +62,7 @@ def main() -> None:
                 ax.scatter(xi, row_y, marker=marker, s=110, color=color, linewidths=2.5, zorder=3)
 
     ax.set_yticks([0, 1])
-    ax.set_yticklabels(["Open-source", "NBO7 (trusted)"])
+    ax.set_yticklabels(["PySCF", "NBO7 (trusted)"])
     ax.set_ylim(-0.6, 1.6)
     ax.set_xlim(-0.6, n - 0.4)
 
@@ -71,7 +71,7 @@ def main() -> None:
     ax.set_xticklabels(xtick_labels, fontsize=9)
 
     ax.set_title(
-        "Open-source vs. NBO7 wCNmax-rule agreement with experiment, per molecule\n"
+        "PySCF vs. NBO7 wCNmax-rule agreement with experiment, per molecule\n"
         "(both 9/17 overall -- tied, but wrong on different molecules)"
     )
 

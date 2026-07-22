@@ -28,8 +28,8 @@ Output:
     'cn'-channel rows, same shape as beckmann.dft.parse_cmo's trusted
     cmo_channel_extraction.csv)
   data/output/analysis/wcnmax_rule_results_opensource.csv (condensed
-    per-molecule result, same shape as the trusted wcnmax_rule_results.csv
-    plus trusted_*/matches_trusted_prediction comparison columns)
+    per-molecule result: exp_outcome/nbo_predicted/pyscf_predicted side by
+    side, plus nbo_*/pyscf_* agreement and diagnostic columns)
 """
 import csv
 import json
@@ -46,9 +46,10 @@ EXTRACTION_FIELDS = [
     "weight", "delta_lumo", "in_window",
 ]
 RESULTS_FIELDS = [
-    "mol", "n_points", "minimum_found", "R_star", "depth", "predicted", "exp_outcome",
-    "agreement", "trusted_minimum_found", "trusted_predicted", "trusted_agreement",
-    "matches_trusted_prediction",
+    "mol", "exp_outcome", "nbo_predicted", "pyscf_predicted",
+    "nbo_agreement", "pyscf_agreement", "pyscf_matches_nbo",
+    "nbo_minimum_found", "pyscf_minimum_found",
+    "pyscf_n_points", "pyscf_R_star", "pyscf_depth",
 ]
 
 
@@ -65,8 +66,8 @@ def main() -> None:
     analysis_dir = DATA_OUTPUT / "analysis"
 
     header = (
-        f"{'mol':<12} {'n_pts':>5} {'min_found':>10} {'predicted':>9} {'exp':>4} {'agree':>6}"
-        f"   || {'trusted min':>11} {'trusted pred':>12} {'trusted agree':>13}"
+        f"{'mol':<12} {'n_pts':>5} {'min_found':>10} {'pyscf':>6} {'exp':>4} {'agree':>6}"
+        f"   || {'nbo min':>8} {'nbo':>6} {'nbo agree':>10}"
     )
     print(header)
     print("-" * len(header))
@@ -90,24 +91,23 @@ def main() -> None:
 
         trusted = trusted_row(mol_name)
         result_rows.append({
-            "mol": mol_name, "n_points": len(rows),
-            "minimum_found": minimum is not None,
-            "R_star": f"{minimum['R_star']:.4f}" if minimum else "",
-            "depth": f"{minimum['depth']:.4f}" if minimum else "",
-            "predicted": predicted, "exp_outcome": exp, "agreement": agreement,
-            "trusted_minimum_found": trusted["minimum_found"],
-            "trusted_predicted": trusted["predicted"],
-            "trusted_agreement": trusted["agreement"],
-            "matches_trusted_prediction": "yes" if predicted == trusted["predicted"] else "no",
+            "mol": mol_name, "exp_outcome": exp,
+            "nbo_predicted": trusted["predicted"], "pyscf_predicted": predicted,
+            "nbo_agreement": trusted["agreement"], "pyscf_agreement": agreement,
+            "pyscf_matches_nbo": "yes" if predicted == trusted["predicted"] else "no",
+            "nbo_minimum_found": trusted["minimum_found"], "pyscf_minimum_found": minimum is not None,
+            "pyscf_n_points": len(rows),
+            "pyscf_R_star": f"{minimum['R_star']:.4f}" if minimum else "",
+            "pyscf_depth": f"{minimum['depth']:.4f}" if minimum else "",
         })
 
         print(
-            f"{mol_name:<12} {len(rows):>5} {str(minimum is not None):>10} {predicted:>9} "
+            f"{mol_name:<12} {len(rows):>5} {str(minimum is not None):>10} {predicted:>6} "
             f"{exp:>4} {agreement:>6}   || "
-            f"{trusted['minimum_found']:>11} {trusted['predicted']:>12} {trusted['agreement']:>13}"
+            f"{trusted['minimum_found']:>8} {trusted['predicted']:>6} {trusted['agreement']:>10}"
         )
 
-    print(f"\nopen-source wCNmax rule agreement with experiment: {open_source_agree}/{len(result_rows)}")
+    print(f"\nPySCF wCNmax rule agreement with experiment: {open_source_agree}/{len(result_rows)}")
 
     extraction_path = analysis_dir / "wcnmax_channel_extraction_opensource.csv"
     with open(extraction_path, "w", newline="") as f:
