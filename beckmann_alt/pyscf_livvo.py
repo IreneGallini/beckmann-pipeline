@@ -60,22 +60,14 @@ def build_mol(case: dict, basis: str = "6-311+g(d,p)") -> gto.Mole:
     )
 
 
-def run_scf(mol: gto.Mole, xc: str = "wb97x-d", solvent_name: str | None = "water", density_fit: bool = True):
+def run_scf(mol: gto.Mole, xc: str = "wb97x-d", solvent_name: str = "water"):
     """Single-point RKS with density fitting + ddCOSMO solvent (see module docstring
     for why ddCOSMO, not SMD, despite our own pipeline using SMD/water). Returns the
-    converged mf.
-
-    solvent_name=None and density_fit=False are diagnostic-only toggles added to
-    isolate the fixed +5-6%/-1-MO-index offset documented in
-    Notes_open_source_alt.md -- every other caller in this repo relies on the
-    defaults (ddCOSMO/water, density-fit on) and is unaffected."""
+    converged mf."""
     _enable_wb97xd()
-    mf = dft.RKS(mol)
-    if density_fit:
-        mf = mf.density_fit()
+    mf = dft.RKS(mol).density_fit()
     mf.xc = xc
-    if solvent_name is not None:
-        mf = solvent.ddCOSMO(mf)
+    mf = solvent.ddCOSMO(mf)
     mf.kernel()
     if not mf.converged:
         raise RuntimeError("SCF did not converge")

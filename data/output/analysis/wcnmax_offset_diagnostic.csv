@@ -1,5 +1,0 @@
-MO_index_0based,MO_index_1based,condition,density_fit,epsilon,frontier_virt_eigs_5,gaussian_gas_frontier_virt_5,is_own_lumo,lumo_epsilon,nocc,pct_diff_vs_NBO7,solvent,wCNmax
-47,48,baseline_ddcosmo_df,True,-0.01137,"[np.float64(-0.01137), np.float64(0.02714), np.float64(0.03445), np.float64(0.05405), np.float64(0.06456)]",,True,-0.01137,47,5.58,ddCOSMO/water,0.4599
-47,48,gas_same_geometry_df,True,-0.13467,"[np.float64(-0.13467), np.float64(-0.12532), np.float64(-0.07539), np.float64(-0.07489), np.float64(-0.04379)]",,True,-0.13467,47,15.7,gas (none),0.504
-47,48,ddcosmo_no_df,False,-0.01137,"[np.float64(-0.01137), np.float64(0.02714), np.float64(0.03445), np.float64(0.05405), np.float64(0.06456)]",,True,-0.01137,47,5.58,ddCOSMO/water,0.4599
-48,49,gas_archive_geometry_df,True,-0.136,"[np.float64(-0.14454), np.float64(-0.136), np.float64(-0.0872), np.float64(-0.07583), np.float64(-0.03976)]","[-0.14455, -0.136, -0.0872, -0.07584, -0.03976]",False,-0.14454,47,14.45,gas (none),0.4986
