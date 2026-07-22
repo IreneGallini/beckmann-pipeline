@@ -34,10 +34,12 @@ Output:
 """
 import csv
 import json
+import sys
+from pathlib import Path
 
 from beckmann.config import DATA_INPUT, DATA_OUTPUT
 from beckmann.dft.descriptors import find_wcnmax_minimum
-from beckmann.dft.inputs import TEST_IDS
+from beckmann.dft.inputs import ALL_IDS, TEST_IDS
 from beckmann.dft.wcnmax_rule import predict_from_wcnmax
 
 from beckmann_alt.pair_nbo import run_test_set_scan_series
@@ -62,9 +64,30 @@ def trusted_row(mol_name: str) -> dict:
     raise ValueError(f"{mol_name}: no row in {path}")
 
 
+def merge_write_csv(path: Path, fieldnames: list[str], new_rows: list[dict]) -> None:
+    """Read-merge-write instead of blind overwrite: keeps every existing row whose
+    'mol' isn't in new_rows (in its existing order), then appends new_rows. Called
+    once per molecule (not once at the end of the whole run) so a later molecule's
+    crash can't discard an earlier molecule's already-computed result."""
+    existing = list(csv.DictReader(open(path))) if path.exists() else []
+    new_mols = {r["mol"] for r in new_rows}
+    merged = [r for r in existing if r["mol"] not in new_mols] + new_rows
+    with open(path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(merged)
+
+
 def main() -> None:
+    mol_ids = sys.argv[1:] or sorted(TEST_IDS)
+    bad = [m for m in mol_ids if m not in ALL_IDS]
+    if bad:
+        raise ValueError(f"not in ALL_IDS: {bad}")
+
     outcomes = json.loads((DATA_INPUT / "benchmark_meta.json").read_text())
     analysis_dir = DATA_OUTPUT / "analysis"
+    extraction_path = analysis_dir / "wcnmax_channel_extraction_opensource.csv"
+    results_path = analysis_dir / "wcnmax_rule_results_opensource.csv"
 
     header = (
         f"{'mol':<12} {'n_pts':>5} {'min_found':>10} {'pyscf':>6} {'exp':>4} {'agree':>6}"
@@ -73,34 +96,40 @@ def main() -> None:
     print(header)
     print("-" * len(header))
 
-    all_extraction_rows = []
-    result_rows = []
     open_source_agree = 0
-    for mol_id in sorted(TEST_IDS):
+    n_done = 0
+    for mol_id in mol_ids:
         print(f"-- running {mol_id}...", flush=True)
-        rows = run_test_set_scan_series(mol_id)
-        mol_name = rows[0]["mol"]
-        all_extraction_rows.extend(rows)
+        try:
+            rows = run_test_set_scan_series(mol_id)
+            mol_name = rows[0]["mol"]
 
-        minimum = find_wcnmax_minimum(mol_name, rows)
-        predicted = predict_from_wcnmax(minimum)
-        mol_num = mol_name.split("_")[1]
-        exp = outcomes.get(f"mol_{mol_num}", {}).get("exp_outcome", "")
-        agreement = "yes" if predicted == exp else "no"
+            minimum = find_wcnmax_minimum(mol_name, rows)
+            predicted = predict_from_wcnmax(minimum)
+            mol_num = mol_name.split("_")[1]
+            exp = outcomes.get(f"mol_{mol_num}", {}).get("exp_outcome", "")
+            agreement = "yes" if predicted == exp else "no"
+
+            trusted = trusted_row(mol_name)
+            result_row = {
+                "mol": mol_name, "exp": exp,
+                "NBO": trusted["predicted"], "PySCF": predicted,
+                "NBO_correct": trusted["agreement"], "PySCF_correct": agreement,
+                "NBO_PySCF_match": "yes" if predicted == trusted["predicted"] else "no",
+                "NBO_minimum_found": trusted["minimum_found"], "PySCF_minimum_found": minimum is not None,
+                "n_points": len(rows),
+                "R_star": f"{minimum['R_star']:.4f}" if minimum else "",
+                "R_depth": f"{minimum['depth']:.4f}" if minimum else "",
+            }
+        except Exception as exc:
+            print(f"-- {mol_id}: FAILED ({exc}), skipping")
+            continue
+
+        merge_write_csv(extraction_path, EXTRACTION_FIELDS, rows)
+        merge_write_csv(results_path, RESULTS_FIELDS, [result_row])
+        n_done += 1
         if agreement == "yes":
             open_source_agree += 1
-
-        trusted = trusted_row(mol_name)
-        result_rows.append({
-            "mol": mol_name, "exp": exp,
-            "NBO": trusted["predicted"], "PySCF": predicted,
-            "NBO_correct": trusted["agreement"], "PySCF_correct": agreement,
-            "NBO_PySCF_match": "yes" if predicted == trusted["predicted"] else "no",
-            "NBO_minimum_found": trusted["minimum_found"], "PySCF_minimum_found": minimum is not None,
-            "n_points": len(rows),
-            "R_star": f"{minimum['R_star']:.4f}" if minimum else "",
-            "R_depth": f"{minimum['depth']:.4f}" if minimum else "",
-        })
 
         print(
             f"{mol_name:<12} {len(rows):>5} {str(minimum is not None):>10} {predicted:>6} "
@@ -108,20 +137,8 @@ def main() -> None:
             f"{trusted['minimum_found']:>8} {trusted['predicted']:>6} {trusted['agreement']:>10}"
         )
 
-    print(f"\nPySCF wCNmax rule agreement with experiment: {open_source_agree}/{len(result_rows)}")
-
-    extraction_path = analysis_dir / "wcnmax_channel_extraction_opensource.csv"
-    with open(extraction_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=EXTRACTION_FIELDS)
-        writer.writeheader()
-        writer.writerows(all_extraction_rows)
+    print(f"\nPySCF wCNmax rule agreement with experiment (this run): {open_source_agree}/{n_done}")
     print(f"-> {extraction_path}")
-
-    results_path = analysis_dir / "wcnmax_rule_results_opensource.csv"
-    with open(results_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=RESULTS_FIELDS)
-        writer.writeheader()
-        writer.writerows(result_rows)
     print(f"-> {results_path}")
 
 
