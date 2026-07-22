@@ -290,3 +290,130 @@ label directly, side by side; `NBO_correct`/`PySCF_correct`/`NBO_PySCF_match` ca
 derived comparisons; `n_points`/`R_star`/`R_depth` -- PySCF's own scan diagnostics --
 are the last three columns) and `wcnmax_channel_extraction_opensource.csv` (114
 per-point rows: 48 from the original 6 + 66 from these 11).
+
+# wCNmax: PySCF vs NBO7 — investigation plan and implementation notes (2026-07-22)
+
+Based on `wcnmax_rule_results_opensource.csv` (17 molecules) and the exploration
+already documented in `Notes_open_source_alt.md` (`beckmann_alt/pair_nbo.py`).
+
+## Current state, in one line
+
+Overall accuracy is tied (9/17 each vs. experiment), but not because the two methods
+agree with each other. They disagree on 4 molecules and split those 2-2: NBO7 gets
+mol_006_E and mol_011_E right where PySCF doesn't; PySCF gets mol_016_E and mol_018_E
+right where NBO7 doesn't. The "PySCF minima come out less deep" pattern you're seeing
+now is the same phenomenon already caught once, on mol_006_E specifically, in the
+notes below, not a new problem.
+
+---
+
+## Part 1: investigation plan
+
+### Two known causes, not yet fixed
+
+**1. A fixed magnitude/index offset (across all 6 same-basis test molecules).**
+PySCF's wCNmax comes out +5.2 to +6.2% high (mean ~5.7%) at every point tested, and
+the winning canonical MO is exactly one index lower than NBO7's winning MO, every
+single time, on 6 chemically different substrates. That consistency is a much
+stronger signal for a structural offset than for six coincidentally similar errors.
+
+**2. Muted response to real orbital mixing (avoided crossings).** The PySCF
+construction builds a fresh local orbital just for the one atom pair asked about
+(C-N), directly from that pair's block of the density matrix, with no deflation
+against the rest of the molecule's orbitals. NBO7's real algorithm builds every
+localized orbital in one whole-molecule pass, sequentially deflating each one's
+density before finding the next. Tested directly on mol_006_E's interpolated
+finer-resolution geometries: right at a genuine near-degenerate mixing event, the
+non-deflated local construction responded roughly 5-6x more mutedly than NBO7's own
+deflated result. This is the most likely direct explanation for shallower/narrower
+minima.
+
+### Priority order for the remaining ~3 weeks
+
+**1. Root-cause the fixed offset (cheap, do first).** It's one clean, repeatable
+signal, so isolating the variable should be fast:
+- Re-run 1-2 molecules gas-phase on both sides (no solvent model at all) to check
+  whether ddCOSMO-vs-SMD is the source, rather than solvent-model choice itself.
+- Toggle density fitting off for one small molecule, even if slow, to rule it in or
+  out.
+- Compare raw virtual-orbital eigenvalues near the frontier (not the wCNmax weight)
+  between PySCF and Gaussian on the same geometry. If the ordering itself is
+  shifted by one slot near the frontier, that's the direct explanation for the -1
+  MO-index pattern regardless of which upstream setting causes it.
+- If confirmed fixed, this becomes a calibratable correction, not something to chase
+  to zero.
+
+**2. Recover minima depth during real mixing events (the core issue).**
+- Add deflation to the local per-atom-pair construction (project out already-claimed
+  orbital density before diagonalizing the local block) and re-test specifically on
+  the mol_006_E region where muting was directly measured, this time using real
+  Citadel-computed fine-resolution geometries instead of the earlier interpolated
+  Cartesian blends, since Citadel access exists now.
+- Note: an earlier deflation attempt didn't improve the winning wCNmax value's match
+  to NBO7, but it was aimed at "which MO wins," not "how deep is the dip at a
+  crossing." Those are different questions and worth a second, narrower pass.
+- If deflation doesn't move it, try widening the local subspace itself (a 3-atom
+  cluster around the C-N bond instead of a strict pair) before concluding deflation
+  is the wrong lever.
+
+**3. Push scan resolution (if time remains, and the actual point of this tool).**
+PySCF is cheap enough to scan at 0.02 Å or finer across all molecules, which is the
+real value case for the Enamine/triage goal: use PySCF to flag which R-window looks
+interesting, then send only that window to NBO7/Citadel for confirmation, instead of
+scanning blind. mol_006_E's real minimum was completely invisible at the standard
+0.1 Å grid and only showed up at 0.05 Å, so this isn't a hypothetical concern.
+
+### One thing to get sign-off on before sinking more time in
+
+Is the target "match NBO7's numeric depth" or "correctly flag the R-region where a
+minimum exists, even if the magnitude is muted"? These call for different fixes
+(offset-correction vs. depth-recovery), and the stated Enamine/triage use case only
+strictly needs the second one. Worth confirming with Isayev/Tetiana before choosing
+where to spend the remaining time.
+
+---
+
+## Part 2: how the two implementations differ (for anyone, code-optional)
+
+Both sides compute exactly the same quantity: for the C-N antibond, scan every
+virtual molecular orbital from the LUMO up to LUMO+0.4 a.u., take that antibond's
+coefficient in each orbital's expansion, square it, and keep the largest value
+found. That definition comes straight from the same theoretical framework behind
+Tetiana's reference paper, and both sides target it identically. Where they differ
+is in how each one builds the local orbital frame that coefficient gets measured
+against.
+
+- **NBO7 (Gaussian, the trusted numbers everywhere else in this project):** builds
+  every localized bonding/antibonding orbital in the molecule in one pass,
+  sequentially deflating each one's density before finding the next. This whole-
+  molecule deflation is what gives NBO7's antibonds their sharp character,
+  including sharp responses to genuine orbital-mixing events.
+- **PySCF (open-source prototype):** builds a fresh, local orbital subspace for
+  just the one requested atom pair, directly from that pair's block of the density
+  matrix in an IAO basis, structurally the same kind of operation NBO does for one
+  pair, just without deflating against the rest of the molecule. Much faster (no
+  need to build the whole molecule's localized orbital set to ask about one bond),
+  but the local orbital doesn't get "sharpened" the way NBO's does.
+- **Practical consequence:** the two agree closely on which channel dominates and on
+  general orbital character (validated to within 1% on Tetiana's own worked
+  reference compound), but PySCF's version responds more mutedly wherever two
+  orbitals are genuinely mixing, which surfaces as a shallower or narrower dip right
+  at the R values where a Beckmann-relevant handoff happens. There's also a small,
+  consistent (+5-6%) magnitude offset present even away from mixing regions,
+  not yet root-caused (Part 1, item 1).
+- **Level-of-theory notes, secondary but worth disclosing:** PySCF uses ddCOSMO as
+  an implicit-solvent stand-in instead of Gaussian's actual SMD/water calculation
+  (the compiled SMD extension isn't available in this pip build), and uses
+  density-fitted integrals for speed. Neither is expected to be the main driver of
+  the pattern above, but both are real, disclosed deviations from the reference
+  calculation.
+- **What's held constant:** basis set (6-311+G(d,p)), functional (wB97XD), and
+  geometry (frozen, taken directly from the already-converged Gaussian structure,
+  no independent PySCF optimization). This isolates the question to "does this
+  local-construction method reproduce the same orbital character," not "does a
+  different geometry or basis change the answer."
+- **Shared theoretical foundation:** Tetiana's own reference calculation for this
+  descriptor is itself Gaussian/NBO-based, so this isn't a competing physical
+  theory. It's a test of whether a faster, structurally simpler construction of the
+  same NBO-style local antibond can get close enough to NBO7's numbers to be useful
+  as a pre-screening step before committing to a full NBO7 run.
