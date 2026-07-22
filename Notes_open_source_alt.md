@@ -166,3 +166,188 @@ corrected one.
 much smaller (0.7%) but its MO offset is much larger (-11), underscoring that magnitude
 agreement and orbital-identity agreement are answering different questions here, and
 that `5_s0_Me`'s numbers shouldn't be pooled with the other 6 in any summary statistic.
+
+## The wCNmax-minima rule, open-source vs. NBO7 (6 test-set molecules)
+
+Main branch's `beckmann/dft/wcnmax_rule.py` predicts rearrangement ('R') for any
+substrate whose wCNmax(R) scan shows a genuine interior minimum, fragmentation ('F')
+otherwise -- 25/34 (74%) on the full benchmark set. `beckmann_alt/wcnmax_scan_rule.py`
+reproduces this using the open-source per-atom-pair method instead of NBO7, for the 6
+main-pipeline test-set molecules, by computing wCNmax at every point of each
+molecule's existing R(N-O) scan series (`beckmann_alt/pair_nbo.run_test_set_scan_series`,
+via a new `beckmann_alt/geometry.load_test_set_scan_series()` that extracts geometry at
+each scan point the same way `beckmann.dft.parse_cmo` does -- last "Standard
+orientation" block before each CMO section, `STEP_SCAN_SOURCES`-merged for mol_020_E --
+so point identity/R(N-O) values line up with the trusted series) and feeding the result
+through the SAME `find_wcnmax_minimum()`/`predict_from_wcnmax()` main-pipeline code, not
+a reimplementation.
+
+| mol | open-source: min found / predicted / agrees w/ exp | NBO7: min found / predicted / agrees w/ exp | same call as NBO7? |
+|---|---|---|---|
+| mol_002_E | True / R / no | True / R / no | yes |
+| mol_006_E | **False** / F / **no** | True / R / **yes** | **no** |
+| mol_014_Z | True / R / no | True / R / no | yes |
+| mol_020_E | True / R / yes | True / R / yes | yes |
+| mol_021_E | True / R / yes | True / R / yes | yes |
+| mol_029_Z | True / R / yes | True / R / yes | yes |
+
+**Open-source rule: 3/6 (50%) agreement with experiment vs. NBO7's 4/6 (67%) on this
+subset.** The only molecule where the two methods' classification actually differs is
+mol_006_E -- everywhere else they agree on whether a minimum exists, even where that
+shared call happens to be wrong. Output: `data/output/analysis/wcnmax_rule_results_opensource.csv`
+(per-molecule) and `wcnmax_channel_extraction_opensource.csv` (per-point, all 6
+molecules, 48 rows total).
+
+## mol_006_E follow-up: the same "coarse scan misses the minimum" failure, one level finer
+
+mol_006_E is the molecule whose *trusted* NBO7 scan originally needed a finer 0.05 A
+rerun to reveal its wCNmax minimum at all -- the original 0.1 A/5-point grid stepped
+directly over it (see the scope-decision note near the top of this file and Notes.md).
+The open-source method's standard series above already runs at that same promoted
+0.05 A resolution (7 points, `nbo` + `scan_1`..`scan_6`, R=1.5108-1.8108) and still
+shows no minimum -- smooth and monotonically increasing across NBO7's entire dip region
+(`data/output/analysis/plots/mol006_opensource_vs_nbo7_wcnmax.png`, first version).
+
+Following the same instinct that fixed the NBO7 side originally: added 8 more points at
+0.01 A resolution across R=1.6108-1.7108 A (the window bracketing NBO7's dip), built via
+`beckmann_alt.geometry.interpolate_case()` -- a linear Cartesian blend between two
+already-converged scan-point geometries, **not** an independently DFT-relaxed structure
+at the new R (no new Gaussian/Citadel jobs; see that function's docstring for the
+caveat). Result: a real interior minimum appears at **R=1.6408, wCNmax=0.4313, depth
+0.0184** (`find_wcnmax_minimum`-style: neighbors 0.4495/0.4500) -- invisible at 0.05 A
+spacing, exactly like NBO7's own history with this molecule. Updated plot (now marking
+0.05 A scan points as filled circles and 0.01 A interpolated points as open triangles):
+same PNG path above. Merged 15-point series saved to
+`data/output/analysis/wcnmax_channel_extraction_opensource_mol006_interp.csv` (NOT
+merged into the main `wcnmax_channel_extraction_opensource.csv`, which stays consistent
+at 0.05 A across all 6 molecules for a fair rule comparison -- this is a separate,
+targeted follow-up).
+
+### Why the open-source dip is much shallower than NBO7's: root-caused, not just observed
+
+Both methods' winning-MO trajectory switches canonical-MO identity across this exact R
+window, one MO index apart (the same systematic offset as everywhere else in this
+project):
+
+| | R=1.6108/1.6108 (before) | at the crossing | R=1.7108/1.6608->1.7108 (after) |
+|---|---|---|---|
+| **NBO7** (`cmo_channel_extraction.csv`) | MO44, coeff=-0.653 | **MO45, coeff=0.571** (R=1.6608) | MO45, coeff=-0.654 |
+| **Open-source** (candidate diagnostics) | MO43, coeff=+0.671 | **MO44, coeff=+0.657** (R=1.6408) | MO44, coeff=+0.671 |
+
+Re-ran the open-source calculation at R=1.6308/1.6408/1.6508/1.6608 keeping the FULL
+local-antibond candidate diagnostics (`beckmann_alt/_compute_interp_diagnostics.py`,
+every eigenvector below `ANTIBOND_OCC_THRESHOLD`, not just the winner) instead of only
+the final wCNmax number. The winning candidate (occupation always ~0.20, the same
+local eigenvector throughout) is confirmed to be the SAME physical object across the
+whole window -- what changes is which canonical MO it projects onto most strongly:
+MO43 for R<=1.6308, MO44 for R>=1.6408, with R=1.6408 itself sitting right at the
+handoff (its own projection onto MO43 -- the runner-up candidate row in the
+diagnostics -- drops to 0.4094 at the same point, confirming both sides of the
+crossing are captured, not just the winner switching labels).
+
+**This is a real, physical avoided-crossing signature in the open-source method too --
+not a resolution artifact and not noise.** But it is a far more muted version of the
+same event:
+- **NBO7's mixing coefficient swings by ~0.082** at the crossing (|0.653| -> |0.571| ->
+  |0.654|, i.e. its BD* trades ~12% of its magnitude between the two canonical MOs).
+- **Open-source's swings by only ~0.014** (0.671 -> 0.657 -> 0.671, ~2%).
+- Ratio: **~5.5-5.9x** (consistent whether measured via wmax-depth, 0.1010/0.0184=5.49,
+  or via the raw coefficient swing, 0.082/0.014=5.9) -- both quantifications agree
+  closely, so this isn't an artifact of one particular way of measuring "depth."
+
+**Interpretation:** the crossing itself -- two canonical MOs trading CN-antibond
+character as N-O stretches -- is a real feature of the underlying electronic structure
+that both methods' SCF calculations reproduce, at essentially the same R (one MO index
+apart, the same systematic offset seen everywhere else) and same qualitative shape.
+What differs is how sharply the METHOD's own antibond target vector responds to it.
+NBO7's real BD* is built by NBO's actual algorithm: an iterative, whole-molecule
+Lewis-structure search that deflates (subtracts) already-accepted bonding density
+before searching each new atom pair, producing a antibond that is by construction
+sharply, almost purely two-center-localized. `beckmann_alt/pair_nbo.py`'s local
+construction builds its candidate directly from the RAW density matrix restricted to
+just the two atoms' IAOs, with no deflation of the rest of the molecule's bonding (the
+limitation already flagged in the "Second follow-up"/"Third follow-up" sections above)
+-- so it retains some background coupling to virtual MOs beyond just the crossing pair,
+and never commits as completely to either side of the crossing. A target vector that's
+already "spread" across more of the virtual manifold has less room left to swing when
+two specific MOs exchange character, which is exactly the muted-but-real signature
+observed here. This also fits the already-documented systematic pattern (open-source
+wCNmax running ~5-6% HIGH everywhere, "Fourth check" above): away from any crossing, a
+less sharply-localized target still finds *some* single dominant MO to project onto
+(here, apparently more so than NBO7's own baseline) even though its response to a real
+crossing is comparatively damped.
+
+**Bottom line**: the open-source method's shallower dip is not evidence the crossing
+isn't real for this molecule -- both methods place it at the same R (within the known
+1-MO-index/5-6% systematic offset) -- but the local, non-deflated per-atom-pair
+construction structurally understates how sharp it is, by roughly a factor of 5-6x in
+this one case. Whether that factor generalizes to other substrates' crossings is not
+yet tested here.
+
+## Expansion: 11 more F-labeled molecules (specificity check)
+
+The 6-molecule comparison above is a small, R-heavy sample (4 R, 2 F) that isn't well
+suited to checking a specific failure mode: does the open-source rule spuriously find an
+interior wCNmax minimum (predicting rearrangement) for substrates that experimentally
+fragment? Ran the same `beckmann_alt/wcnmax_scan_rule.py` workflow
+(`load_test_set_scan_series()`/`run_test_set_scan_series()`, generalized from `TEST_IDS`
+to `ALL_IDS` -- every benchmark molecule has completed Stage 1-3 logs on disk, not just
+the original 6) against all remaining F-labeled benchmark molecules: mol_001, 003, 004,
+007, 008, 010, 011, 012, 016, 017, 018 (11 of the 14 F-labeled substrates -- **mol_005_E
+skipped**: it contains bromine, and PySCF's bundled `6-311G-diffuse.dat` -- the "+"
+diffuse-function file behind `6-311+G(d,p)`'s "+" -- has no Br entry at all, even though
+the base `6-311G` and `d`-polarization files do; building the official basis for this
+one element isn't possible with this pip install, and substituting a different basis for
+just one molecule wasn't done -- skipped rather than silently deviating).
+
+One geometry-loading gap found and fixed along the way: `_mol_stage_points_stepscan()`
+(used for mol_003_E, one of the three `STEP_SCAN_SOURCES` molecules) unconditionally
+required an `_nbo.log` to exist. mol_003_E has none -- its Stage 2 equilibrium NBO job
+never ran, matching `cmo_channel_extraction.csv`'s own data (no `nbo`-stage row for
+mol_003_E either, only `scan_1`..`scan_6`) -- so this now mirrors
+`beckmann.dft.parse_cmo.collect_stage()`'s existing "missing file -> empty, not a hard
+failure" handling rather than crashing.
+
+### Result: tied overall, 9/17 (53%) each
+
+| mol | open-source: min / pred / agree | NBO7: min / pred / agree | exp | same call? |
+|---|---|---|---|---|
+| mol_001_E | True / R / no | True / R / no | F | yes |
+| mol_003_E | True / R / no | True / R / no | F | yes |
+| mol_004_E | False / F / **yes** | False / F / yes | F | yes |
+| mol_007_E | False / F / **yes** | False / F / yes | F | yes |
+| mol_008_E | True / R / no | True / R / no | F | yes |
+| mol_010_E | False / F / **yes** | False / F / yes | F | yes |
+| mol_011_E | True / R / no | **False / F / yes** | F | **no -- NBO7 right** |
+| mol_012_E | True / R / no | True / R / no | F | yes |
+| mol_016_E | **False / F / yes** | True / R / no | F | **no -- open-source right** |
+| mol_017_E | False / F / **yes** | False / F / yes | F | yes |
+| mol_018_E | **False / F / yes** | True / R / no | F | **no -- open-source right** |
+
+Combined with the original 6 (`wcnmax_rule_results_opensource.csv` now holds all 17):
+
+| | accuracy vs. experiment |
+|---|---|
+| open-source | **9/17 (53%)** |
+| NBO7 (same 17) | **9/17 (53%)** |
+
+**Exactly tied, and not by the two methods agreeing with each other -- by being wrong on
+different molecules.** Of the 4 molecules (across all 17) where the two methods'
+predicted label actually differs, it's an even 2-2 split: NBO7 gets mol_006_E and
+mol_011_E right where open-source doesn't; open-source gets mol_016_E and mol_018_E right
+where NBO7 doesn't. The earlier 6-molecule sample (50% vs. 67%) made the open-source
+method look meaningfully worse -- that gap was mostly small-sample noise, not a
+consistent deficit. mol_016_E/mol_018_E are specific cases where NBO7 finds a spurious
+minimum and the open-source method's structurally muted response to orbital crossings
+(the "Why the open-source dip is much shallower" section above) happens to avoid picking
+it up -- the same mechanism that under-detects mol_006_E's real minimum here correctly
+under-detects two false ones. Not enough molecules yet to call this a real specificity
+advantage rather than coincidence.
+
+Output: `data/output/analysis/wcnmax_rule_results_opensource.csv` (17 rows, one per
+molecule tested so far -- `trusted_*`/`matches_trusted_prediction` columns carry the
+NBO7-side comparison for each) and `wcnmax_channel_extraction_opensource.csv` (114
+per-point rows: 48 from the original 6 + 66 from these 11). Visualized in
+`data/output/analysis/plots/wcnmax_opensource_vs_nbo7_agreement.png`
+(`beckmann_alt/plot_agreement_grid.py`) -- a per-molecule grid showing which method (if
+either) got each substrate right.

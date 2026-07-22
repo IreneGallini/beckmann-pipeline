@@ -18,7 +18,7 @@ mol_002_E: our own pipeline, wB97XD/6-311+G(d,p), SMD/water -- fully known level
 """
 from pathlib import Path
 
-from beckmann.dft.inputs import STEP_SCAN_SOURCES, TEST_IDS, resolve_mol_name, step_scan_dir
+from beckmann.dft.inputs import ALL_IDS, STEP_SCAN_SOURCES, TEST_IDS, resolve_mol_name, step_scan_dir
 from beckmann.dft.parse_cmo import find_cmo_sections
 from beckmann.dft.scan import (
     ATOMIC_SYMBOLS, no_distance, oxime_atom_map_from_gjf, parse_standard_orientations,
@@ -212,8 +212,15 @@ def _mol_stage_points_stepscan(mol: str, mol_dir: Path, ni: int, oi: int) -> dic
     instead of NBO data, so R(N-O) point identity matches the trusted series."""
     points: dict[str, list] = {}
     nbo_log = mol_dir / f"{mol}_nbo.log"
-    (atoms,) = _stage_points_from_log(nbo_log, ni, oi).values()
-    points["nbo"] = atoms
+    if nbo_log.exists():
+        by_r = _stage_points_from_log(nbo_log, ni, oi)
+        if by_r:
+            (atoms,) = by_r.values()  # exactly one CMO table in _nbo.log
+            points["nbo"] = atoms
+    # else: no equilibrium NBO for this molecule at all (e.g. mol_003_E,
+    # whose Stage 2 NBO job never ran/completed) -- matches
+    # beckmann.dft.parse_cmo.collect_stage's own "missing file" handling
+    # (empty rows, not a hard failure), so the series is scan-only.
 
     all_by_r: dict[float, list] = {}
     for source in STEP_SCAN_SOURCES[mol]:
@@ -229,15 +236,17 @@ def _mol_stage_points_stepscan(mol: str, mol_dir: Path, ni: int, oi: int) -> dic
 def load_test_set_scan_series(mol_id: str) -> list[dict]:
     """One 'case' dict (same shape as load_case()/load_test_set_case(), plus
     'stage'/'r_no') per available R(N-O) point -- 'nbo' followed by every
-    'scan_N' -- for a main-pipeline test-set molecule. Lets the open-source
-    method be run across a full scan instead of just the equilibrium
-    geometry, using the same geometry-anchor convention and
-    STEP_SCAN_SOURCES merging the main pipeline's own descriptor extraction
-    (beckmann.dft.parse_cmo) uses, so point identity/R(N-O) values line up
-    with the trusted NBO7 series.
+    'scan_N' -- for any main-pipeline benchmark molecule with completed DFT
+    logs under data/output/dft_opt/ (ALL_IDS, not just the original 6
+    TEST_IDS -- every benchmark substrate has completed Stage 1-3 logs on
+    disk, see Notes_open_source_alt.md). Lets the open-source method be run
+    across a full scan instead of just the equilibrium geometry, using the
+    same geometry-anchor convention and STEP_SCAN_SOURCES merging the main
+    pipeline's own descriptor extraction (beckmann.dft.parse_cmo) uses, so
+    point identity/R(N-O) values line up with the trusted NBO7 series.
     """
-    if mol_id not in TEST_IDS:
-        raise ValueError(f"{mol_id}: not in TEST_IDS ({sorted(TEST_IDS)})")
+    if mol_id not in ALL_IDS:
+        raise ValueError(f"{mol_id}: not in ALL_IDS ({sorted(ALL_IDS)})")
     dft_opt_dir = DATA_OUTPUT / "dft_opt"
     mol_name = resolve_mol_name(mol_id, dft_opt_dir)
     if mol_name is None:

@@ -5,3 +5,14 @@ mol_014_Z,7,True,1.6534,0.0972,R,F,no,True,R,no,yes
 mol_020_E,13,True,1.6429,0.0757,R,R,yes,True,R,yes,yes
 mol_021_E,7,True,1.6033,0.0270,R,R,yes,True,R,yes,yes
 mol_029_Z,7,True,1.6566,0.0606,R,R,yes,True,R,yes,yes
+mol_001_E,6,True,1.6596,0.0091,R,F,no,True,R,no,yes
+mol_003_E,6,True,1.6278,0.0006,R,F,no,True,R,no,yes
+mol_004_E,6,False,,,F,F,yes,False,F,yes,yes
+mol_007_E,6,False,,,F,F,yes,False,F,yes,yes
+mol_008_E,6,True,1.7477,0.1366,R,F,no,True,R,no,yes
+mol_010_E,6,False,,,F,F,yes,False,F,yes,yes
+mol_011_E,6,True,1.6567,0.0616,R,F,no,False,F,yes,no
+mol_012_E,6,True,1.6489,0.0491,R,F,no,True,R,no,yes
+mol_016_E,6,False,,,F,F,yes,True,R,no,no
+mol_017_E,6,False,,,F,F,yes,False,F,yes,yes
+mol_018_E,6,False,,,F,F,yes,True,R,no,no
