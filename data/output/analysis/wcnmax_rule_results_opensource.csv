@@ -18,3 +18,5 @@ mol_017_E,F,F,F,yes,yes,yes,False,False,6,,
 mol_018_E,F,R,F,no,yes,no,True,False,6,,
 mol_009_E,R,R,R,yes,yes,yes,True,True,6,1.6603,0.0120
 mol_013_E,R,R,F,yes,no,no,True,False,6,,
+mol_015_E,R,F,F,no,no,yes,False,False,6,,
+mol_019_E,R,R,R,yes,yes,yes,True,True,6,1.6505,0.1105
