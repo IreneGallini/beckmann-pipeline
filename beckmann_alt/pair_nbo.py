@@ -158,7 +158,7 @@ def run_test_set_case(mol_id: str) -> dict:
     return run_from_case(load_test_set_case(mol_id))
 
 
-def run_test_set_scan_series(mol_id: str) -> list[dict]:
+def run_test_set_scan_series(mol_id: str, stages: list[str] | None = None) -> list[dict]:
     """wCNmax at every R(N-O) point of a test-set molecule's scan series
     (beckmann_alt.geometry.load_test_set_scan_series) -- one PySCF SCF +
     local per-atom-pair projection per point, not just the single
@@ -168,8 +168,14 @@ def run_test_set_scan_series(mol_id: str) -> list[dict]:
     beckmann.dft.descriptors.find_wcnmax_minimum() can be called on the
     result directly, reusing the main pipeline's own interior-minimum
     criterion rather than reimplementing it here.
+
+    stages, if given, restricts the run to just those stage labels (e.g.
+    mol_034_E's STEP_SCAN_SOURCES-merged series has 12 points, ~2x every
+    other molecule's 6 -- pass a 6-point subset to keep runtime comparable).
     """
     cases = load_test_set_scan_series(mol_id)
+    if stages is not None:
+        cases = [c for c in cases if c["stage"] in stages]
     rows = []
     for case in cases:
         result = run_from_case(case)

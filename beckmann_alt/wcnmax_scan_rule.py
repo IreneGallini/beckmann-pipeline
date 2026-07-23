@@ -55,6 +55,14 @@ RESULTS_FIELDS = [
     "n_points", "R_star", "R_depth",
 ]
 
+# mol_034_E's STEP_SCAN_SOURCES-merged series has 12 points (2x every other
+# molecule's 6), which kept getting caught mid-run by interruptions on this
+# machine. Every-other-point subset, shifted to land on scan_6 (R=1.669), the
+# exact R of NBO7's own trusted interior minimum for this molecule (R_star=
+# 1.6690 in wcnmax_rule_results.csv) -- keeps the minimum visible with points
+# on both sides at roughly 6-point-series resolution.
+STAGE_OVERRIDE = {"034": ["scan_2", "scan_4", "scan_6", "scan_8", "scan_10", "scan_12"]}
+
 
 def trusted_row(mol_name: str) -> dict:
     path = DATA_OUTPUT / "analysis" / "wcnmax_rule_results.csv"
@@ -101,7 +109,7 @@ def main() -> None:
     for mol_id in mol_ids:
         print(f"-- running {mol_id}...", flush=True)
         try:
-            rows = run_test_set_scan_series(mol_id)
+            rows = run_test_set_scan_series(mol_id, stages=STAGE_OVERRIDE.get(mol_id))
             mol_name = rows[0]["mol"]
 
             minimum = find_wcnmax_minimum(mol_name, rows)

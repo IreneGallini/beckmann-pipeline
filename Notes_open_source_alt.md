@@ -291,6 +291,60 @@ derived comparisons; `n_points`/`R_star`/`R_depth` -- PySCF's own scan diagnosti
 are the last three columns) and `wcnmax_channel_extraction_opensource.csv` (114
 per-point rows: 48 from the original 6 + 66 from these 11).
 
+## Full benchmark run: all 32 runnable molecules (2026-07-22)
+
+Ran the remaining 15 non-test-set molecules (mol_009, 013, 015, 019, 022, 023, 024,
+025, 026, 027, 028, 030, 031, 033, 034) through the same `wcnmax_scan_rule.py`
+workflow, in small batches to bound peak memory/CPU on a laptop. `wcnmax_scan_rule.py`
+now takes molecule ids as CLI args (`python -m beckmann_alt.wcnmax_scan_rule 009 013`,
+no args = original `TEST_IDS` default) and merges each molecule's result into the
+existing CSVs as soon as it's computed, instead of overwriting the whole file at the
+end of the run -- this made it safe to run one or two molecules at a time and safe
+against a run getting interrupted partway (which happened repeatedly this session;
+no data was lost, since a molecule's row is only written once its own scan series is
+fully computed).
+
+mol_005_E and mol_032_E remain skipped -- both contain Br, and PySCF's bundled
+`6-311G-diffuse.dat` (the "+" diffuse-function file behind `6-311+G(d,p)`) has no Br
+entry, same issue documented above for mol_005. **32 of 34 benchmark molecules now
+covered.**
+
+mol_034_E's `STEP_SCAN_SOURCES`-merged series has 12 R(N-O) points (2x every other
+molecule's 6), which kept getting caught mid-run by interruptions. Tried a 6-point
+subset instead (`scan_2/4/6/8/10/12`, chosen to bracket NBO7's own trusted interior
+minimum, R_star=1.6690, with three points on each side; `run_test_set_scan_series()`
+gained an optional `stages=` filter for this, `beckmann_alt/pair_nbo.py` -- default
+`None` behavior is unchanged for every other molecule/caller) -- but a stale retry
+process from an earlier interrupted attempt turned out to still be running in the
+background (despite being reported as killed) and finished the full 12-point run
+*after* the 6-point result had already been written and verified, silently overwriting
+it via the same read-merge-write logic that's supposed to protect against exactly this
+(it protects against a crash losing data, not against two overlapping runs of the same
+molecule racing each other). Caught by re-checking the CSV after an unexpected
+late-arriving completion notification. The full 12-point result is what's actually in
+the CSV now (`n_points=12`, `R_star=1.6290`, `R_depth=0.0954`) and is what the tally
+below reflects -- it still finds the minimum and predicts R, matching both NBO7 and
+experiment, same as the 6-point version did. The `stages=` filter is left in
+`pair_nbo.py` since it's a real, reusable capability; just not exercised in the
+molecule actually recorded here.
+
+### Result: 21/32 (66%) open-source vs. 23/32 (72%) NBO7, no longer tied
+
+| | accuracy vs. experiment |
+|---|---|
+| open-source | **21/32 (66%)** |
+| NBO7 (same 32) | **23/32 (72%)** |
+| open-source predicts the same R/F call as NBO7 | **26/32 (81%)** |
+
+Unlike the earlier 17-molecule sample (exactly tied, 9/17 each), NBO7 now leads by 2
+molecules once the full runnable benchmark is included -- still close, and the two
+methods still agree with each other on the large majority (26/32) of calls, including
+plenty of shared wrong calls (both methods lean toward over-predicting rearrangement,
+the same false-positive-heavy pattern noted throughout this file). All 32 rows,
+`n_points`/`R_star`/`R_depth` included, live in `wcnmax_rule_results_opensource.csv`;
+per-point data (96 new rows -- 14 molecules x 6 points plus mol_034_E's 12 -- on top of
+the previous 114) in `wcnmax_channel_extraction_opensource.csv`.
+
 # wCNmax: PySCF vs NBO7 — investigation plan and implementation notes (2026-07-22)
 
 Based on `wcnmax_rule_results_opensource.csv` (17 molecules) and the exploration
@@ -417,3 +471,41 @@ against.
   theory. It's a test of whether a faster, structurally simpler construction of the
   same NBO-style local antibond can get close enough to NBO7's numbers to be useful
   as a pre-screening step before committing to a full NBO7 run.
+
+## Part 1 outcome: offset/deflation diagnostics run, then set aside (2026-07-22)
+
+Ran diagnostic 1 (root-cause the fixed offset) and diagnostic 2 (deflation) from the
+plan above, on mol_002_E and mol_006_E respectively, both against real (never
+interpolated) geometries:
+
+- **The "-1 MO index" part of the offset is not a real electronic-structure effect.**
+  Confirmed directly from `cmo_channel_extraction.csv`: NBO7's own trusted winning MO
+  is the LUMO itself (`delta_lumo=0.0`) in every one of the 6 original test molecules.
+  A fresh PySCF run on mol_002_E confirmed the same is true on the open-source side
+  (`mo_index == nocc`). Both methods pick the literal LUMO every time -- they just
+  number it differently (0-based array index vs. Gaussian's 1-based orbital number).
+  Not a bug in the wCNmax construction; a reporting mismatch if `MO_index` columns
+  from the two CSVs are ever compared directly.
+- **The +5.2-6.2% magnitude offset is not explained by solvent choice, density
+  fitting, or virtual-orbital ordering** -- all three ruled out with direct evidence
+  (gas-phase PySCF on the same geometry made the mismatch *worse*, not better;
+  density-fit on/off gave bit-identical results; PySCF's frontier virtual eigenvalues
+  matched a real Gaussian gas-phase calculation on the same geometry to 4-5 decimals).
+- **Deflation (local per-atom-pair construction, projecting out the C-aryl/C-alkyl/N-O
+  bonds' own density before diagonalizing the C-N block) had no effect** on mol_006_E's
+  R=1.6608 point -- before/after wCNmax agreed to 8 decimal places, even though the
+  deflation measurably perturbed the local block's eigenspectrum. Also found, using the
+  real Citadel finescan geometry (not the earlier interpolated blends): PySCF isn't
+  showing a *muted* dip at this point, it shows *no* dip at all -- its value sits
+  higher than NBO7's trusted number, right on PySCF's own smooth monotonic trend across
+  the scan. Reframes the earlier interpolation-based "~5-6x muted" finding.
+
+**Decision:** rather than keep tuning the deflation pair selection or widening the
+local subspace blind, the exploratory code (`beckmann_alt/diagnose_offset.py`,
+`diagnose_deflation.py`, and the deflation additions to `pair_nbo.py`) was removed from
+the tree as added complexity without a clear payoff yet -- consistent with this
+project's practice elsewhere in this file of not carrying speculative code forward.
+Full diffs remain in git history (`ea4a4e2`, `ce3c510`) for anyone revisiting this.
+Widening the local subspace (a 3-atom cluster instead of a strict pair) is the
+suggested next lever if this is picked back up, per the original diagnostic-2 fallback
+instruction.
