@@ -4,7 +4,7 @@ every main-pipeline test-set molecule (mol_002/006/014/020/021/029).
 
 Trusted numbers are read directly from the already-generated
 data/output/analysis/cmo_channel_extraction.csv (nbo/R0 stage, channel 'cn') --
-never recomputed by a different method here. See Notes_open_source_alt.md,
+never recomputed by a different method here. See Notes_pyscf_alt.md,
 "wCNmax across all 6 test-set molecules", for the write-up of the result this
 reproduces.
 """

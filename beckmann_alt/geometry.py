@@ -14,7 +14,7 @@ mol_002_E: our own pipeline, wB97XD/6-311+G(d,p), SMD/water -- fully known level
     log by hand; not attempted here. We run this case at OUR basis (6-311+G(d,p))
     instead, so any comparison against the paper's reported numbers is a
     different-basis check, not an apples-to-apples validation -- see
-    Notes_open_source_alt.md.
+    Notes_pyscf_alt.md.
 """
 from pathlib import Path
 
@@ -239,7 +239,7 @@ def load_test_set_scan_series(mol_id: str) -> list[dict]:
     'scan_N' -- for any main-pipeline benchmark molecule with completed DFT
     logs under data/output/dft_opt/ (ALL_IDS, not just the original 6
     TEST_IDS -- every benchmark substrate has completed Stage 1-3 logs on
-    disk, see Notes_open_source_alt.md). Lets the open-source method be run
+    disk, see Notes_pyscf_alt.md). Lets the PySCF method be run
     across a full scan instead of just the equilibrium geometry, using the
     same geometry-anchor convention and STEP_SCAN_SOURCES merging the main
     pipeline's own descriptor extraction (beckmann.dft.parse_cmo) uses, so

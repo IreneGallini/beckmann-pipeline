@@ -1,6 +1,6 @@
 """
-Shared PySCF SCF/projection helpers for the open-source wCNmax prototype
-(`beckmann_alt/pair_nbo.py`) -- see Notes_open_source_alt.md for the full writeup,
+Shared PySCF SCF/projection helpers for the PySCF wCNmax prototype
+(`beckmann_alt/pair_nbo.py`) -- see Notes_pyscf_alt.md for the full writeup,
 caveats, and comparison against the trusted NBO7 numbers.
 
 Pipeline, mirroring the NBO7 CMO step conceptually (not numerically):

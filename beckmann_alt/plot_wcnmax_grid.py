@@ -1,17 +1,17 @@
 """
-Small-multiples grid of the open-source PySCF wCNmax(R) series for all 32 covered
+Small-multiples grid of the PySCF wCNmax(R) series for all 32 covered
 benchmark molecules (mol_005_E/mol_032_E permanently skipped -- bromine, unsupported
-by this PySCF install's basis files, see Notes_open_source_alt.md), in the same visual
+by this PySCF install's basis files, see Notes_pyscf_alt.md), in the same visual
 format as the trusted pipeline's data/output/analysis/plots/wcnmax_grid.png
 (scripts/analysis/summarize_descriptors.py -> beckmann.dft.viz.plot_wcnmax_grid()).
 
 Reuses plot_wcnmax_grid()/find_wcnmax_extremum() as-is -- both are already generic,
 dict-in, no NBO7-specific logic. The only new piece is build_per_mol_series(), since
-there's no open-source equivalent of channel_descriptors.csv (the descriptor-summary
-CSV load_series() expects) -- wcnmax_channel_extraction_opensource.csv is extraction-
+there's no PySCF equivalent of channel_descriptors.csv (the descriptor-summary
+CSV load_series() expects) -- wcnmax_channel_extraction_pyscf.csv is extraction-
 row shaped instead, so the series is built directly from it.
 
-Output: data/output/analysis/plots/wcnmax_grid_opensource.png
+Output: data/output/analysis/plots/wcnmax_grid_pyscf.png
 """
 import csv
 import json
@@ -34,7 +34,7 @@ def build_per_mol_series(rows: list[dict]) -> dict[str, tuple[list[float], list[
 
 def main() -> None:
     analysis_dir = DATA_OUTPUT / "analysis"
-    rows = list(csv.DictReader(open(analysis_dir / "wcnmax_channel_extraction_opensource.csv")))
+    rows = list(csv.DictReader(open(analysis_dir / "wcnmax_channel_extraction_pyscf.csv")))
     outcomes = json.loads((DATA_INPUT / "benchmark_meta.json").read_text())
 
     per_mol_series = build_per_mol_series(rows)
@@ -54,7 +54,7 @@ def main() -> None:
     fig = plot_wcnmax_grid(per_mol_series, extrema, outcome_by_mol, pct_by_mol)
     plots_dir = analysis_dir / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
-    out_path = plots_dir / "wcnmax_grid_opensource.png"
+    out_path = plots_dir / "wcnmax_grid_pyscf.png"
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
     print(f"-- wrote {out_path} ({len(mols)} molecules)")

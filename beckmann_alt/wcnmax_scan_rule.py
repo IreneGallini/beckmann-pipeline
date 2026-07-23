@@ -1,6 +1,6 @@
 """
 Reproduce beckmann.dft.wcnmax_rule's "genuine interior wCNmax minimum ->
-predict rearrangement" benchmark using the open-source per-atom-pair wCNmax
+predict rearrangement" benchmark using the PySCF per-atom-pair wCNmax
 (beckmann_alt.pair_nbo) instead of NBO7, for the 6 main-pipeline test-set
 molecules (mol_002/006/014/020/021/029).
 
@@ -9,7 +9,7 @@ For each molecule: compute wCNmax at every point of its R(N-O) scan series
 into beckmann.dft.descriptors.find_wcnmax_minimum() -- the SAME minimum-
 detection code the trusted NBO7 benchmark uses (beckmann/dft/wcnmax_rule.py)
 -- and predict R/F via beckmann.dft.wcnmax_rule.predict_from_wcnmax(). This
-checks whether the open-source method's own R(N-O) trend reproduces the
+checks whether the PySCF method's own R(N-O) trend reproduces the
 rule's classification, not just whether its equilibrium wCNmax value is
 numerically close to NBO7's (see beckmann_alt/compare_wcnmax.py for that
 narrower single-point check).
@@ -24,10 +24,10 @@ Each molecule is a real DFT scan (6-13 PySCF single-points), so this is slow
 as separate processes instead of serially through this script.
 
 Output:
-  data/output/analysis/wcnmax_channel_extraction_opensource.csv (per-point
+  data/output/analysis/wcnmax_channel_extraction_pyscf.csv (per-point
     'cn'-channel rows, same shape as beckmann.dft.parse_cmo's trusted
     cmo_channel_extraction.csv)
-  data/output/analysis/wcnmax_rule_results_opensource.csv (condensed
+  data/output/analysis/wcnmax_rule_results_pyscf.csv (condensed
     per-molecule result: exp/NBO/PySCF predicted R/F labels side by side,
     correctness/cross-method-match columns, then n_points/R_star/R_depth
     -- PySCF's own scan diagnostics -- as the last three columns)
@@ -94,8 +94,8 @@ def main() -> None:
 
     outcomes = json.loads((DATA_INPUT / "benchmark_meta.json").read_text())
     analysis_dir = DATA_OUTPUT / "analysis"
-    extraction_path = analysis_dir / "wcnmax_channel_extraction_opensource.csv"
-    results_path = analysis_dir / "wcnmax_rule_results_opensource.csv"
+    extraction_path = analysis_dir / "wcnmax_channel_extraction_pyscf.csv"
+    results_path = analysis_dir / "wcnmax_rule_results_pyscf.csv"
 
     header = (
         f"{'mol':<12} {'n_pts':>5} {'min_found':>10} {'pyscf':>6} {'exp':>4} {'agree':>6}"
@@ -104,7 +104,7 @@ def main() -> None:
     print(header)
     print("-" * len(header))
 
-    open_source_agree = 0
+    pyscf_agree = 0
     n_done = 0
     for mol_id in mol_ids:
         print(f"-- running {mol_id}...", flush=True)
@@ -137,7 +137,7 @@ def main() -> None:
         merge_write_csv(results_path, RESULTS_FIELDS, [result_row])
         n_done += 1
         if agreement == "yes":
-            open_source_agree += 1
+            pyscf_agree += 1
 
         print(
             f"{mol_name:<12} {len(rows):>5} {str(minimum is not None):>10} {predicted:>6} "
@@ -145,7 +145,7 @@ def main() -> None:
             f"{trusted['minimum_found']:>8} {trusted['predicted']:>6} {trusted['agreement']:>10}"
         )
 
-    print(f"\nPySCF wCNmax rule agreement with experiment (this run): {open_source_agree}/{n_done}")
+    print(f"\nPySCF wCNmax rule agreement with experiment (this run): {pyscf_agree}/{n_done}")
     print(f"-> {extraction_path}")
     print(f"-> {results_path}")
 

@@ -1,5 +1,5 @@
 """
-Local per-atom-pair construction for an open-source wCNmax analog: instead of drawing
+Local per-atom-pair construction for an PySCF wCNmax analog: instead of drawing
 from a pre-built global set of localized virtual orbitals, build a fresh, local
 subspace for each atom pair directly from that pair's own block of the density matrix
 (in a Löwdin-orthogonalized IAO basis) -- structurally the same operation as NBO's own
@@ -7,7 +7,7 @@ per-atom-pair antibond search, just applied to one requested pair at a time.
 
 Scoped to wCNmax only -- the actual predictive descriptor this project needs. Earlier
 exploration (LIVVO-based and crude-AO-projection channel identification, w17max/w78max,
-an iterative-deflation follow-up) is preserved in `Notes_open_source_alt.md` and in this
+an iterative-deflation follow-up) is preserved in `Notes_pyscf_alt.md` and in this
 branch's git history (`git log -- beckmann_alt/pair_nbo.py`), not repeated here.
 
 Construction:
@@ -38,7 +38,7 @@ Construction:
      coefficient wins" rule (Notes.md) exactly, just applied to locally-built candidates
      instead of NBO's own pre-labeled BD*(1)/BD*(2) pair.
 
-Result (Notes_open_source_alt.md, "Second follow-up"): wCNmax within 1-6% of the
+Result (Notes_pyscf_alt.md, "Second follow-up"): wCNmax within 1-6% of the
 trusted NBO7 value on both reference cases (mol_002_E, 5_s0_Me) -- the best result of
 any method tried in this exploration, and the only one that reproduces wCNmax's central
 diagnostic signature (clearly the dominant channel) in both cases.

@@ -1,8 +1,8 @@
-# Open-source wCNmax prototype (branch: open-source-wcnmax-prototype)
+# PySCF wCNmax prototype (branch: open-source-wcnmax-prototype)
 
 Exploratory only. Nothing here touches `beckmann/dft/` or the validated main-branch
 pipeline. Main branch's NBO7-derived numbers remain the trusted ground truth throughout
--- this branch asks "does this open-source alternative rank/trend the same way," not
+-- this branch asks "does this PySCF alternative rank/trend the same way," not
 "are these numbers more correct."
 
 New code lives entirely in `beckmann_alt/`:
@@ -167,12 +167,12 @@ much smaller (0.7%) but its MO offset is much larger (-11), underscoring that ma
 agreement and orbital-identity agreement are answering different questions here, and
 that `5_s0_Me`'s numbers shouldn't be pooled with the other 6 in any summary statistic.
 
-## The wCNmax-minima rule, open-source vs. NBO7 (6 test-set molecules)
+## The wCNmax-minima rule, PySCF vs. NBO7 (6 test-set molecules)
 
 Main branch's `beckmann/dft/wcnmax_rule.py` predicts rearrangement ('R') for any
 substrate whose wCNmax(R) scan shows a genuine interior minimum, fragmentation ('F')
 otherwise -- 25/34 (74%) on the full benchmark set. `beckmann_alt/wcnmax_scan_rule.py`
-reproduces this using the open-source per-atom-pair method instead of NBO7, for the 6
+reproduces this using the PySCF per-atom-pair method instead of NBO7, for the 6
 main-pipeline test-set molecules, by computing wCNmax at every point of each
 molecule's existing R(N-O) scan series (`beckmann_alt/pair_nbo.run_test_set_scan_series`,
 via a new `beckmann_alt/geometry.load_test_set_scan_series()` that extracts geometry at
@@ -182,7 +182,7 @@ so point identity/R(N-O) values line up with the trusted series) and feeding the
 through the SAME `find_wcnmax_minimum()`/`predict_from_wcnmax()` main-pipeline code, not
 a reimplementation.
 
-| mol | open-source: min found / predicted / agrees w/ exp | NBO7: min found / predicted / agrees w/ exp | same call as NBO7? |
+| mol | PySCF: min found / predicted / agrees w/ exp | NBO7: min found / predicted / agrees w/ exp | same call as NBO7? |
 |---|---|---|---|
 | mol_002_E | True / R / no | True / R / no | yes |
 | mol_006_E | **False** / F / **no** | True / R / **yes** | **no** |
@@ -191,22 +191,22 @@ a reimplementation.
 | mol_021_E | True / R / yes | True / R / yes | yes |
 | mol_029_Z | True / R / yes | True / R / yes | yes |
 
-**Open-source rule: 3/6 (50%) agreement with experiment vs. NBO7's 4/6 (67%) on this
+**PySCF rule: 3/6 (50%) agreement with experiment vs. NBO7's 4/6 (67%) on this
 subset.** The only molecule where the two methods' classification actually differs is
 mol_006_E -- everywhere else they agree on whether a minimum exists, even where that
-shared call happens to be wrong. Output: `data/output/analysis/wcnmax_rule_results_opensource.csv`
-(per-molecule) and `wcnmax_channel_extraction_opensource.csv` (per-point, all 6
+shared call happens to be wrong. Output: `data/output/analysis/wcnmax_rule_results_pyscf.csv`
+(per-molecule) and `wcnmax_channel_extraction_pyscf.csv` (per-point, all 6
 molecules, 48 rows total).
 
 ## mol_006_E follow-up: interior minimum invisible at 0.05 Å resolution
 
-mol_006_E is the one molecule (of the original 6) where the open-source series
+mol_006_E is the one molecule (of the original 6) where the PySCF series
 disagrees with NBO7 on whether a genuine interior wCNmax minimum exists at all: NBO7
 finds one (depth 0.1010, R=1.6608, predicting rearrangement, matching experiment); the
-open-source series (7 points, `nbo` + `scan_1`..`scan_6`, the same standard 0.05 Å
+PySCF series (7 points, `nbo` + `scan_1`..`scan_6`, the same standard 0.05 Å
 resolution used everywhere else) is smooth and monotonically increasing across NBO7's
 entire dip region -- no minimum
-(`data/output/analysis/plots/mol006_opensource_vs_nbo7_wcnmax.png`).
+(`data/output/analysis/plots/mol006_pyscf_vs_nbo7_wcnmax.png`).
 
 **Decision: only directly-computed geometries are used for any comparison in this
 project** -- an earlier pass tried probing this gap with interpolated intermediate
@@ -218,7 +218,7 @@ underlying canonical-MO crossing far more mutedly than NBO7's own whole-molecule
 deflated BD*, ~5-6x muted specifically). That interpolation-based code and its
 generated CSV have been removed (`beckmann_alt.geometry.interpolate_case`,
 `_compute_interp_point.py`, `_compute_interp_diagnostics.py`,
-`wcnmax_channel_extraction_opensource_mol006_interp.csv`) since results built on
+`wcnmax_channel_extraction_pyscf_mol006_interp.csv`) since results built on
 non-relaxed geometries aren't a substitute for genuinely re-running the DFT scan at a
 finer step -- available via `git log -- beckmann_alt/` for the full writeup and numbers
 if this is revisited with real (Citadel-computed) finer-resolution geometries instead.
@@ -226,7 +226,7 @@ if this is revisited with real (Citadel-computed) finer-resolution geometries in
 ## Expansion: 11 more F-labeled molecules (specificity check)
 
 The 6-molecule comparison above is a small, R-heavy sample (4 R, 2 F) that isn't well
-suited to checking a specific failure mode: does the open-source rule spuriously find an
+suited to checking a specific failure mode: does the PySCF rule spuriously find an
 interior wCNmax minimum (predicting rearrangement) for substrates that experimentally
 fragment? Ran the same `beckmann_alt/wcnmax_scan_rule.py` workflow
 (`load_test_set_scan_series()`/`run_test_set_scan_series()`, generalized from `TEST_IDS`
@@ -249,7 +249,7 @@ failure" handling rather than crashing.
 
 ### Result: tied overall, 9/17 (53%) each
 
-| mol | open-source: min / pred / agree | NBO7: min / pred / agree | exp | same call? |
+| mol | PySCF: min / pred / agree | NBO7: min / pred / agree | exp | same call? |
 |---|---|---|---|---|
 | mol_001_E | True / R / no | True / R / no | F | yes |
 | mol_003_E | True / R / no | True / R / no | F | yes |
@@ -259,36 +259,36 @@ failure" handling rather than crashing.
 | mol_010_E | False / F / **yes** | False / F / yes | F | yes |
 | mol_011_E | True / R / no | **False / F / yes** | F | **no -- NBO7 right** |
 | mol_012_E | True / R / no | True / R / no | F | yes |
-| mol_016_E | **False / F / yes** | True / R / no | F | **no -- open-source right** |
+| mol_016_E | **False / F / yes** | True / R / no | F | **no -- PySCF right** |
 | mol_017_E | False / F / **yes** | False / F / yes | F | yes |
-| mol_018_E | **False / F / yes** | True / R / no | F | **no -- open-source right** |
+| mol_018_E | **False / F / yes** | True / R / no | F | **no -- PySCF right** |
 
-Combined with the original 6 (`wcnmax_rule_results_opensource.csv` now holds all 17):
+Combined with the original 6 (`wcnmax_rule_results_pyscf.csv` now holds all 17):
 
 | | accuracy vs. experiment |
 |---|---|
-| open-source | **9/17 (53%)** |
+| PySCF | **9/17 (53%)** |
 | NBO7 (same 17) | **9/17 (53%)** |
 
 **Exactly tied, and not by the two methods agreeing with each other -- by being wrong on
 different molecules.** Of the 4 molecules (across all 17) where the two methods'
 predicted label actually differs, it's an even 2-2 split: NBO7 gets mol_006_E and
-mol_011_E right where open-source doesn't; open-source gets mol_016_E and mol_018_E right
-where NBO7 doesn't. The earlier 6-molecule sample (50% vs. 67%) made the open-source
+mol_011_E right where PySCF doesn't; PySCF gets mol_016_E and mol_018_E right
+where NBO7 doesn't. The earlier 6-molecule sample (50% vs. 67%) made the PySCF
 method look meaningfully worse -- that gap was mostly small-sample noise, not a
 consistent deficit. mol_016_E/mol_018_E are specific cases where NBO7 finds a spurious
-minimum and the open-source method's generally muted response to sharp features
+minimum and the PySCF method's generally muted response to sharp features
 (the local, non-deflated per-atom-pair construction's own systematic understating of
 these dips/crossings -- see the mol_006_E follow-up above) happens to avoid picking it
 up -- the same tendency that under-detects mol_006_E's real minimum here correctly
 under-detects two false ones. Not enough molecules yet to call this a real specificity
 advantage rather than coincidence.
 
-Output: `data/output/analysis/wcnmax_rule_results_opensource.csv` (17 rows, one per
+Output: `data/output/analysis/wcnmax_rule_results_pyscf.csv` (17 rows, one per
 molecule tested so far -- `exp`/`NBO`/`PySCF` columns hold each side's predicted R/F
 label directly, side by side; `NBO_correct`/`PySCF_correct`/`NBO_PySCF_match` carry the
 derived comparisons; `n_points`/`R_star`/`R_depth` -- PySCF's own scan diagnostics --
-are the last three columns) and `wcnmax_channel_extraction_opensource.csv` (114
+are the last three columns) and `wcnmax_channel_extraction_pyscf.csv` (114
 per-point rows: 48 from the original 6 + 66 from these 11).
 
 ## Full benchmark run: all 32 runnable molecules (2026-07-22)
@@ -328,27 +328,27 @@ experiment, same as the 6-point version did. The `stages=` filter is left in
 `pair_nbo.py` since it's a real, reusable capability; just not exercised in the
 molecule actually recorded here.
 
-### Result: 21/32 (66%) open-source vs. 23/32 (72%) NBO7, no longer tied
+### Result: 21/32 (66%) PySCF vs. 23/32 (72%) NBO7, no longer tied
 
 | | accuracy vs. experiment |
 |---|---|
-| open-source | **21/32 (66%)** |
+| PySCF | **21/32 (66%)** |
 | NBO7 (same 32) | **23/32 (72%)** |
-| open-source predicts the same R/F call as NBO7 | **26/32 (81%)** |
+| PySCF predicts the same R/F call as NBO7 | **26/32 (81%)** |
 
 Unlike the earlier 17-molecule sample (exactly tied, 9/17 each), NBO7 now leads by 2
 molecules once the full runnable benchmark is included -- still close, and the two
 methods still agree with each other on the large majority (26/32) of calls, including
 plenty of shared wrong calls (both methods lean toward over-predicting rearrangement,
 the same false-positive-heavy pattern noted throughout this file). All 32 rows,
-`n_points`/`R_star`/`R_depth` included, live in `wcnmax_rule_results_opensource.csv`;
+`n_points`/`R_star`/`R_depth` included, live in `wcnmax_rule_results_pyscf.csv`;
 per-point data (96 new rows -- 14 molecules x 6 points plus mol_034_E's 12 -- on top of
-the previous 114) in `wcnmax_channel_extraction_opensource.csv`.
+the previous 114) in `wcnmax_channel_extraction_pyscf.csv`.
 
 # wCNmax: PySCF vs NBO7 — investigation plan and implementation notes (2026-07-22)
 
-Based on `wcnmax_rule_results_opensource.csv` (17 molecules) and the exploration
-already documented in `Notes_open_source_alt.md` (`beckmann_alt/pair_nbo.py`).
+Based on `wcnmax_rule_results_pyscf.csv` (17 molecules) and the exploration
+already documented in `Notes_pyscf_alt.md` (`beckmann_alt/pair_nbo.py`).
 
 ## Current state, in one line
 
@@ -442,7 +442,7 @@ against.
   sequentially deflating each one's density before finding the next. This whole-
   molecule deflation is what gives NBO7's antibonds their sharp character,
   including sharp responses to genuine orbital-mixing events.
-- **PySCF (open-source prototype):** builds a fresh, local orbital subspace for
+- **PySCF (PySCF prototype):** builds a fresh, local orbital subspace for
   just the one requested atom pair, directly from that pair's block of the density
   matrix in an IAO basis, structurally the same kind of operation NBO does for one
   pair, just without deflating against the rest of the molecule. Much faster (no
@@ -481,7 +481,7 @@ interpolated) geometries:
 - **The "-1 MO index" part of the offset is not a real electronic-structure effect.**
   Confirmed directly from `cmo_channel_extraction.csv`: NBO7's own trusted winning MO
   is the LUMO itself (`delta_lumo=0.0`) in every one of the 6 original test molecules.
-  A fresh PySCF run on mol_002_E confirmed the same is true on the open-source side
+  A fresh PySCF run on mol_002_E confirmed the same is true on the PySCF side
   (`mo_index == nocc`). Both methods pick the literal LUMO every time -- they just
   number it differently (0-based array index vs. Gaussian's 1-based orbital number).
   Not a bug in the wCNmax construction; a reporting mismatch if `MO_index` columns
