@@ -44,10 +44,14 @@ Output: data/output/analysis/cmo_descriptors.csv (summary: w17max/w78max/wcnmax/
         coefficient before squaring the wX^max summary columns above are a max over
         this data, but which MO achieves it can shift identity between scan points
         (canonical MOs are energy-ordered and can change character along the scan), so
-        that intermediate detail is kept here rather than discarded. This is what a
-        later avoided-crossing check (small eigenvalue gap + character exchange between
-        two nearby virtual MOs near the wCNmax extremum) would need -- not implemented
-        yet, this module only preserves the data for it.
+        that intermediate detail is kept here rather than discarded. The 'cn' channel
+        rows additionally carry a runner-up MO (second_MO_index/second_epsilon_i_star/
+        second_coefficient/second_weight/mo_gap) and the aryl-migrating C-C antibond's
+        own coefficient in both the winning and runner-up MO (aryl_coeff_in_winner/
+        aryl_coeff_in_second) -- see compute_cn_extras() and
+        beckmann.dft.descriptors.classify_crossing(), which uses this to tell a real
+        avoided crossing (small persistent eigenvalue gap + complementary CN/aryl
+        coefficient swap) apart from a numerical wobble or a clean handoff.
 """
 import csv
 import math
@@ -88,7 +92,24 @@ CHANNEL_TARGETS = {
 EXTRACTION_FIELDS = [
     "mol", "stage", "channel", "R_NO", "MO_index", "epsilon_i_star", "coefficient", "weight",
     "delta_lumo", "in_window",
+    # Runner-up MO for the 'cn' channel + the aryl-migrating C-C antibond's own
+    # coefficient in both the winning and runner-up MO -- populated only for
+    # channel == "cn" (None for '17'/'78' rows). Feeds
+    # beckmann.dft.descriptors.classify_crossing()'s avoided-crossing check
+    # (small, persistent eigenvalue gap + complementary CN/aryl coefficient
+    # swap between the same two MOs), not used by any existing wX^max/Lambda
+    # descriptor -- see Notes.md's "Proposed approach (not implemented yet)".
+    "second_MO_index", "second_epsilon_i_star", "second_coefficient", "second_weight", "mo_gap",
+    "aryl_coeff_in_winner", "aryl_coeff_in_second",
 ]
+
+# Filled in for '17'/'78' channel rows, which don't get their own runner-up/aryl-coeff
+# extraction (see compute_cn_extras -- 'cn' channel only).
+NO_CN_EXTRA = {
+    "second_MO_index": None, "second_epsilon_i_star": None, "second_coefficient": None,
+    "second_weight": None, "mo_gap": None,
+    "aryl_coeff_in_winner": None, "aryl_coeff_in_second": None,
+}
 
 
 def find_cmo_sections(lines: list[str]) -> list[int]:
@@ -146,6 +167,28 @@ def is_target_antibond(label: str, a: int, b: int) -> bool:
     return has_a and has_b
 
 
+def all_weight_matches_for_target(vir_mos: list[dict], a: int, b: int) -> list[dict]:
+    """Every virtual MO containing the BD* antibond between atoms a and b, as
+    {weight, mo_index, epsilon_i_star, coefficient} dicts, sorted descending by
+    weight (squared coefficient) -- exposes the runner-up match(es), not just
+    the single winner max_weight_for_target() reduces this to. A given MO
+    contributes at most one entry (is_target_antibond matches whichever of
+    that MO's own contribs is the target antibond). Empty list if the
+    antibond never appears in vir_mos.
+    """
+    matches = [
+        {
+            "weight": coeff ** 2, "mo_index": mo["mo"],
+            "epsilon_i_star": mo["energy"], "coefficient": coeff,
+        }
+        for mo in vir_mos
+        for coeff, label in mo["contribs"]
+        if is_target_antibond(label, a, b)
+    ]
+    matches.sort(key=lambda m: m["weight"], reverse=True)
+    return matches
+
+
 def max_weight_for_target(
     vir_mos: list[dict], a: int, b: int, lumo_e: float | None = None, window_au: float = 0.4,
 ) -> tuple[float | None, int | None, float | None, float | None, float | None, bool | None]:
@@ -161,15 +204,18 @@ def max_weight_for_target(
     energy and signed coefficient of the MO that achieves the max, plus how far above the LUMO
     it sits and whether that's inside the original 0.4 a.u. window (both None if lumo_e isn't
     given, or if the antibond was never found).
+
+    Just matches[0] from all_weight_matches_for_target() -- kept as its own function with a
+    byte-identical return shape/order since wX^max/Lambda/Psi and several scripts
+    (validate_reference_descriptors.py, compare_wcnmax_window.py) unpack this positionally.
     """
-    best_val = best_mo = best_epsilon = best_coeff = None
-    for mo in vir_mos:
-        for coeff, label in mo["contribs"]:
-            if is_target_antibond(label, a, b):
-                w = coeff ** 2
-                if best_val is None or w > best_val:
-                    best_val, best_mo, best_epsilon, best_coeff = w, mo["mo"], mo["energy"], coeff
-    if best_val is None or lumo_e is None:
+    matches = all_weight_matches_for_target(vir_mos, a, b)
+    if not matches:
+        return None, None, None, None, None, None
+    best = matches[0]
+    best_val, best_mo = best["weight"], best["mo_index"]
+    best_epsilon, best_coeff = best["epsilon_i_star"], best["coefficient"]
+    if lumo_e is None:
         return best_val, best_mo, best_epsilon, best_coeff, None, None
     delta_lumo = best_epsilon - lumo_e
     return best_val, best_mo, best_epsilon, best_coeff, delta_lumo, delta_lumo <= window_au + 1e-9
@@ -186,15 +232,66 @@ def compute_channel_weights(
     }
 
 
-def compute_descriptors(mo_table: list[dict], ci: int, ni: int, c_aryl: int, c_alkyl: int) -> tuple[dict, dict]:
-    """Returns (summary_dict, channels) channels is the raw per-channel detail
+def coefficient_in_mo(vir_mos: list[dict], a: int, b: int, mo_index: int | None) -> float | None:
+    """Signed coefficient of the BD*(a,b) antibond in one SPECIFIC MO (looked up by
+    index), or None if that MO doesn't carry it (or mo_index is None). Unlike
+    max_weight_for_target()/all_weight_matches_for_target(), this doesn't search for
+    the best match across the manifold -- it looks up one already-known MO, e.g. to
+    ask "what's the aryl C-C antibond's own character in the MO that wins the CN
+    channel" rather than wherever the aryl channel's own max happens to sit."""
+    if mo_index is None:
+        return None
+    for mo in vir_mos:
+        if mo["mo"] != mo_index:
+            continue
+        for coeff, label in mo["contribs"]:
+            if is_target_antibond(label, a, b):
+                return coeff
+    return None
+
+
+def compute_cn_extras(vir_mos: list[dict], ci: int, ni: int, c_aryl: int) -> dict:
+    """Runner-up MO for the 'cn' channel (BD*(C{ci}-N{ni})) plus the aryl-migrating
+    C-C antibond's (BD*(C{ci}-C{c_aryl})) own coefficient projected onto both the
+    winning and runner-up MO -- the data classify_crossing()
+    (beckmann.dft.descriptors) needs to tell a real avoided crossing (persistent
+    small gap + complementary CN/aryl coefficient swap) apart from a numerical
+    wobble or a clean handoff with no coexisting second MO. See Notes.md's
+    "Proposed approach (not implemented yet)". All fields None when there's no
+    second MO carrying the CN antibond (a clean handoff/no handoff at all)."""
+    cn_matches = all_weight_matches_for_target(vir_mos, ci, ni)
+    winner = cn_matches[0] if cn_matches else None
+    second = cn_matches[1] if len(cn_matches) > 1 else None
+    winner_mo = winner["mo_index"] if winner else None
+    second_mo = second["mo_index"] if second else None
+    mo_gap = (
+        round(abs(winner["epsilon_i_star"] - second["epsilon_i_star"]), 5)
+        if winner and second else None
+    )
+    return {
+        "second_MO_index": second_mo,
+        "second_epsilon_i_star": second["epsilon_i_star"] if second else None,
+        "second_coefficient": second["coefficient"] if second else None,
+        "second_weight": second["weight"] if second else None,
+        "mo_gap": mo_gap,
+        "aryl_coeff_in_winner": coefficient_in_mo(vir_mos, ci, c_aryl, winner_mo),
+        "aryl_coeff_in_second": coefficient_in_mo(vir_mos, ci, c_aryl, second_mo),
+    }
+
+
+def compute_descriptors(
+    mo_table: list[dict], ci: int, ni: int, c_aryl: int, c_alkyl: int,
+) -> tuple[dict, dict, dict]:
+    """Returns (summary_dict, channels, cn_extra). channels is the raw per-channel detail
     (weight, mo_index, epsilon_i_star, coefficient) that the summary's wX^max/wX^max_mo
-    columns are themselves derived from, kept around for the extraction table."""
+    columns are themselves derived from, kept around for the extraction table. cn_extra
+    is the runner-up-MO/aryl-antibond detail from compute_cn_extras(), 'cn' channel only."""
     window  = virtual_window(mo_table)
     vir_all = [m for m in mo_table if m["kind"] == "vir"]
     lumo_e  = vir_all[0]["energy"] if vir_all else None
 
     channels = compute_channel_weights(vir_all, ci, ni, c_aryl, c_alkyl, lumo_e)
+    cn_extra = compute_cn_extras(vir_all, ci, ni, c_aryl)
 
     # max_leading_weight/n_virtual_mos_in_window are still scoped to the nominal
     # frontier window -- a different, generic "dominant character near the LUMO"
@@ -229,7 +326,7 @@ def compute_descriptors(mo_table: list[dict], ci: int, ni: int, c_aryl: int, c_a
         "max_leading_weight": max_leading_val, "max_leading_weight_mo": max_leading_mo,
         "n_virtual_mos_in_window": len(window),
     }
-    return summary, channels
+    return summary, channels, cn_extra
 
 
 def parse_log(log_path: Path, ci: int, ni: int, oi: int, c_aryl: int, c_alkyl: int) -> list[dict]:
@@ -251,9 +348,10 @@ def parse_log(log_path: Path, ci: int, ni: int, oi: int, c_aryl: int, c_alkyl: i
         if not table:
             continue
         r_no = r_no_before(lines, start, ni, oi)
-        summary, channels = compute_descriptors(table, ci, ni, c_aryl, c_alkyl)
+        summary, channels, cn_extra = compute_descriptors(table, ci, ni, c_aryl, c_alkyl)
         summary["r_no"] = round(r_no, 4) if r_no is not None else None
         summary["_channels"] = channels
+        summary["_cn_extra"] = cn_extra
         row_by_r[summary["r_no"]] = summary  # last table at this R wins
     return list(row_by_r.values())
 
@@ -279,14 +377,17 @@ def collect_stage(mol: str, mol_dir: Path, ci: int, ni: int, oi: int, c_aryl: in
     ):
         stage_label = f"{stage}_{point}" if len(rows) > 1 else stage
         channels = row.pop("_channels")
+        cn_extra = row.pop("_cn_extra")
         summary_rows.append({"mol": mol, "stage": stage_label, **row})
         for channel_name, (weight, mo_index, epsilon, coeff, delta_lumo, in_window) in channels.items():
+            extra = cn_extra if channel_name == "cn" else NO_CN_EXTRA
             channel_rows.append({
                 "mol": mol, "stage": stage_label, "channel": channel_name,
                 "R_NO": row["r_no"], "MO_index": mo_index,
                 "epsilon_i_star": epsilon, "coefficient": coeff, "weight": weight,
                 "delta_lumo": round(delta_lumo, 5) if delta_lumo is not None else None,
                 "in_window": in_window,
+                **extra,
             })
     return summary_rows, channel_rows
 
