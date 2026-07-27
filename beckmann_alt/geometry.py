@@ -18,6 +18,7 @@ mol_002_E: our own pipeline, wB97XD/6-311+G(d,p), SMD/water -- fully known level
 """
 from pathlib import Path
 
+from beckmann.dft.descriptors import get_substituent_map
 from beckmann.dft.inputs import ALL_IDS, STEP_SCAN_SOURCES, TEST_IDS, resolve_mol_name, step_scan_dir
 from beckmann.dft.parse_cmo import find_cmo_sections
 from beckmann.dft.scan import (
@@ -142,6 +143,7 @@ def load_test_set_case(mol_id: str) -> dict:
     opt_gjf = mol_dir / f"{mol_name}_opt.gjf"
     opt_log = mol_dir / f"{mol_name}_opt.log"
     ci, ni, oi, _ = oxime_atom_map_from_gjf(opt_gjf)
+    subst = get_substituent_map(mol_name, mol_dir)
 
     atoms = final_geometry(opt_log)
     return {
@@ -151,6 +153,7 @@ def load_test_set_case(mol_id: str) -> dict:
         "charge": CHARGE,
         "spin": SPIN,
         "ci": ci, "ni": ni, "oi": oi,
+        "c_aryl": subst["c_aryl"], "c_alkyl": subst["c_alkyl"],
         "basis_note": "our own pipeline's 6-311+G(d,p), all-electron -- exact match to config.py",
     }
 
@@ -254,6 +257,7 @@ def load_test_set_scan_series(mol_id: str) -> list[dict]:
 
     mol_dir = dft_opt_dir / mol_name
     ci, ni, oi, _ = oxime_atom_map_from_gjf(mol_dir / f"{mol_name}_opt.gjf")
+    subst = get_substituent_map(mol_name, mol_dir)
 
     if mol_name in STEP_SCAN_SOURCES:
         points = _mol_stage_points_stepscan(mol_name, mol_dir, ni, oi)
@@ -277,6 +281,7 @@ def load_test_set_scan_series(mol_id: str) -> list[dict]:
             "charge": CHARGE,
             "spin": SPIN,
             "ci": ci, "ni": ni, "oi": oi,
+            "c_aryl": subst["c_aryl"], "c_alkyl": subst["c_alkyl"],
             "basis_note": "our own pipeline's 6-311+G(d,p), all-electron -- exact match to config.py",
         })
     return cases

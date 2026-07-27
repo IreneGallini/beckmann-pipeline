@@ -1,0 +1,35 @@
+mol,exp,pre_mo,post_mo,handoff_R,gap_at_handoff,gap_min,R_at_gap_min,bracketed_at_handoff,eigenvalue_crossing_confirmed,partner_label_pre,partner_label_post,partner_is_ON_sigma_star,aryl_ever_present_in_pair
+mol_001_E,F,40,41,1.7096,0.01406,0.00223,1.6596,True,True,BD*( 1) O 1- N 2*,BD*( 1) O 1- N 2*,True,False
+mol_002_E,F,48,49,1.6592,0.00301,0.00301,1.6592,True,True,BD*( 1) N12- O13*,BD*( 1) N12- O13*,True,False
+mol_003_E,F,44,45,1.6678,0.002,0.002,1.6678,True,True,BD*( 1) O 1- N 2*,BD*( 1) O 1- N 2*,True,False
+mol_004_E,F,48,49,1.707,0.01011,0.00624,1.657,True,True,BD*( 1) O 1- N 2*,BD*( 1) O 1- N 2*,True,False
+mol_005_E,F,57,58,1.7069,0.00922,0.00709,1.6569,True,True,BD*( 1) O 1- N 2*,BD*( 1) O 1- N 2*,True,False
+mol_006_E,R,44,45,1.6608,0.00037,0.00037,1.6608,True,True,BD*( 1) N11- O12*,BD*( 1) N11- O12*,True,False
+mol_007_E,F,56,57,1.7058,0.00492,0.00492,1.7058,True,True,BD*( 1) O 1- N 2*,BD*( 1) O 1- N 2*,True,False
+mol_008_E,F,52,53,1.6477,0.01599,0.00231,1.5977,True,True,BD*( 1) N13- O14*,BD*( 1) N13- O14*,True,False
+mol_009_E,R,44,45,1.7103,0.01456,0.00174,1.6603,True,True,BD*( 1) N 9- O10*,BD*( 1) N 9- O10*,True,False
+mol_010_E,F,48,49,1.7098,0.01326,0.00288,1.6598,True,True,BD*( 1) N10- O11*,BD*( 1) N10- O11*,True,False
+mol_011_E,F,44,45,1.7067,0.01019,0.00623,1.6567,True,True,BD*( 1) O 1- N 2*,BD*( 1) O 1- N 2*,True,False
+mol_012_E,F,52,53,1.6989,0.00726,0.00726,1.6989,True,True,BD*( 1) N11- O12*,BD*( 1) N11- O12*,True,False
+mol_013_E,R,44,45,1.6664,0.00199,0.00199,1.6664,True,True,BD*( 1) N 9- O10*,BD*( 1) N 9- O10*,True,False
+mol_014_Z,F,44,45,1.7034,0.00894,0.00894,1.7034,True,True,BD*( 1) O 1- N 2*,BD*( 1) O 1- N 2*,True,False
+mol_015_E,R,44,45,1.7081,0.01517,0.00102,1.6581,True,True,BD*( 1) N11- O12*,BD*( 1) N11- O12*,True,False
+mol_016_E,F,48,49,1.7073,0.01602,0.00064,1.6573,True,True,BD*( 1) N12- O13*,BD*( 1) N12- O13*,True,False
+mol_017_E,F,44,45,1.7034,0.0113,0.00513,1.6534,True,True,BD*( 1) O 1- N 2*,BD*( 1) O 1- N 2*,True,False
+mol_018_E,F,52,53,1.698,0.01548,0.00145,1.648,True,True,BD*( 1) N13- O14*,BD*( 1) N13- O14*,True,False
+mol_019_E,R,44,45,1.7005,0.01685,0.01074,1.6505,True,True,BD*( 1) O 1- N 2*,BD*( 1) O 1- N 2*,True,False
+mol_020_E,R,48,49,1.6629,0.00962,0.00962,1.6629,True,True,BD*( 1) N12- O13*,BD*( 1) N12- O13*,True,False
+mol_021_E,R,52,53,1.7033,0.01837,0.00732,1.6533,True,True,BD*( 1) N13- O14*,BD*( 1) N13- O14*,True,False
+mol_022_E,R,48,49,1.6997,0.01649,0.01094,1.6497,True,True,BD*( 1) O 1- N 2*,BD*( 1) O 1- N 2*,True,False
+mol_023_E,R,56,57,1.644,0.01362,0.00409,1.594,True,True,BD*( 1) N14- O15*,BD*( 1) N14- O15*,True,False
+mol_024_E,R,48,49,1.7037,0.01824,0.01237,1.6537,True,True,BD*( 1) N 9- O10*,BD*( 1) N 9- O10*,True,False
+mol_025_E,R,52,53,1.7012,0.01704,0.01233,1.6512,True,True,BD*( 1) N10- O11*,BD*( 1) N10- O11*,True,False
+mol_026_E,R,48,49,1.6992,0.01544,0.01361,1.6492,True,True,BD*( 1) O 1- N 2*,BD*( 1) O 1- N 2*,True,False
+mol_027_E,R,56,57,1.6994,0.01377,0.01377,1.6994,True,True,BD*( 1) N11- O12*,BD*( 1) N11- O12*,True,False
+mol_028_E,R,48,49,1.6668,0.01878,0.01878,1.6668,True,True,BD*( 1) N 9- O10*,BD*( 1) N 9- O10*,True,False
+mol_029_Z,R,48,49,1.6566,0.00588,0.00588,1.6566,True,True,BD*( 1) O 1- N 2*,BD*( 1) O 1- N 2*,True,False
+mol_030_E,R,52,53,1.7064,0.02087,0.0143,1.6564,True,True,BD*( 1) N13- O14*,BD*( 1) N13- O14*,True,False
+mol_031_E,R,48,49,1.7011,0.01503,0.01211,1.6511,True,True,BD*( 1) O 1- N 2*,BD*( 1) O 1- N 2*,True,False
+mol_032_E,R,61,62,1.6982,0.01359,0.01345,1.6482,True,True,BD*( 1) O 1- N 2*,BD*( 1) O 1- N 2*,True,False
+mol_033_E,R,52,53,1.6987,0.01367,0.01263,1.6487,True,True,BD*( 1) O 1- N 2*,BD*( 1) O 1- N 2*,True,False
+mol_034_E,R,48,49,1.669,0.01439,0.01439,1.669,True,True,BD*( 1) N12- O13*,BD*( 1) N12- O13*,True,False

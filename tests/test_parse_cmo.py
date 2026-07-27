@@ -1,8 +1,7 @@
 """
-Tests for beckmann/dft/parse_cmo.py's runner-up-MO/aryl-antibond extraction
-(all_weight_matches_for_target, coefficient_in_mo, compute_cn_extras) and the
-byte-identical-regression guarantee on max_weight_for_target() -- see Notes.md's
-"Proposed approach (not implemented yet)" for the full spec this implements.
+Tests for beckmann/dft/parse_cmo.py's runner-up-MO/antibond-lookup extraction
+(all_weight_matches_for_target, coefficient_in_mo) and the byte-identical-regression
+guarantee on max_weight_for_target().
 
 Synthetic vir_mos fixtures are hand-built dicts matching parse_cmo_table()'s
 shape ({"mo", "kind", "energy", "contribs": [(coeff, label), ...]}) rather than
@@ -10,7 +9,7 @@ parsed from a real .log, so these tests don't depend on any DFT output being
 present on disk.
 """
 from beckmann.dft.parse_cmo import (
-    all_weight_matches_for_target, coefficient_in_mo, compute_cn_extras, max_weight_for_target,
+    all_weight_matches_for_target, coefficient_in_mo, max_weight_for_target,
 )
 
 
@@ -79,33 +78,3 @@ def test_coefficient_in_mo_looks_up_specific_mo():
     assert coefficient_in_mo(vir_mos, 1, 3, 10) == 0.20
     assert coefficient_in_mo(vir_mos, 1, 3, 11) is None  # MO11 doesn't carry the aryl antibond
     assert coefficient_in_mo(vir_mos, 1, 3, None) is None
-
-
-def test_compute_cn_extras_no_second_match():
-    """Only one MO carries the CN antibond -- a clean handoff/no coexistence,
-    all second_*/mo_gap fields must be None."""
-    vir_mos = [_mo(10, -0.05, [(-0.660, "BD*(1) C1-N2"), (0.20, "BD*(1) C1-C3")])]
-    extra = compute_cn_extras(vir_mos, ci=1, ni=2, c_aryl=3)
-    assert extra["second_MO_index"] is None
-    assert extra["second_epsilon_i_star"] is None
-    assert extra["second_coefficient"] is None
-    assert extra["second_weight"] is None
-    assert extra["mo_gap"] is None
-    assert extra["aryl_coeff_in_winner"] == 0.20
-    assert extra["aryl_coeff_in_second"] is None
-
-
-def test_compute_cn_extras_two_matches_populates_gap_and_aryl_coeffs():
-    """Two MOs coexist -- mirrors the mol_014_Z-style real near-degenerate-mixing
-    shape from Notes.md (MO44/MO45, ~0.0088 a.u. gap), with the aryl antibond's own
-    coefficient tracked in both the winning and runner-up MO."""
-    vir_mos = [
-        _mo(44, -0.0500, [(0.25, "BD*(1) C1-N2"), (0.10, "BD*(1) C1-C3")]),
-        _mo(45, -0.0412, [(0.60, "BD*(1) C1-N2"), (0.45, "BD*(1) C1-C3")]),
-    ]
-    extra = compute_cn_extras(vir_mos, ci=1, ni=2, c_aryl=3)
-    assert extra["second_MO_index"] == 44
-    assert extra["second_coefficient"] == 0.25
-    assert extra["mo_gap"] == round(abs(-0.0412 - (-0.0500)), 5)
-    assert extra["aryl_coeff_in_winner"] == 0.45   # winner = MO45 (weight 0.36)
-    assert extra["aryl_coeff_in_second"] == 0.10    # second = MO44 (weight 0.0625)

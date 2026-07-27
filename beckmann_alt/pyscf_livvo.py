@@ -87,6 +87,14 @@ def project_virtuals_onto_livvo(mf, s, target_livvo, window_au: float = WINDOW_A
     antibond character peaks beyond LUMO+0.4 a.u. Capping the search here would
     silently reproduce a bug the main pipeline already fixed. window_au is kept only
     as a diagnostic in the returned dict.
+
+    Also tracks the runner-up MO (second-highest projected weight) under a "second"
+    key (None if fewer than two virtual MOs project onto target_livvo at all) --
+    analog of beckmann.dft.parse_cmo.all_weight_matches_for_target()'s matches[1],
+    needed to tell a real avoided crossing (two MOs coexisting with a small,
+    persistent energy gap) apart from a clean handoff. All of the top-level dict's
+    existing keys (weight/mo_index/epsilon/coefficient/delta_lumo/in_window) are
+    unchanged -- this is additive.
     """
     mol = mf.mol
     nocc = mol.nelectron // 2
@@ -95,15 +103,25 @@ def project_virtuals_onto_livvo(mf, s, target_livvo, window_au: float = WINDOW_A
     lumo_e = mo_energy[nocc]
 
     best = {"weight": None, "mo_index": None, "epsilon": None, "coefficient": None}
+    second_best = None
     for i in range(nocc, len(mo_energy)):
         coeff = mo_coeff[:, i] @ s @ target_livvo
         weight = coeff ** 2
+        candidate = {"weight": weight, "mo_index": i, "epsilon": mo_energy[i], "coefficient": coeff}
         if best["weight"] is None or weight > best["weight"]:
-            best = {"weight": weight, "mo_index": i, "epsilon": mo_energy[i], "coefficient": coeff}
+            second_best = best if best["weight"] is not None else second_best
+            best = candidate
+        elif second_best is None or weight > second_best["weight"]:
+            second_best = candidate
     if best["epsilon"] is not None:
         delta_lumo = best["epsilon"] - lumo_e
         best["delta_lumo"] = delta_lumo
         best["in_window"] = delta_lumo <= window_au + 1e-9
     else:
         best["delta_lumo"] = best["in_window"] = None
+    if second_best is not None:
+        second_delta_lumo = second_best["epsilon"] - lumo_e
+        second_best["delta_lumo"] = second_delta_lumo
+        second_best["in_window"] = second_delta_lumo <= window_au + 1e-9
+    best["second"] = second_best
     return best

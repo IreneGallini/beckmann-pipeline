@@ -28,9 +28,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 from beckmann.config import DATA_INPUT, DATA_OUTPUT
-from beckmann.dft.descriptors import (
-    DESCRIPTORS, find_wcnmax_extremum, load_series,
-)
+from beckmann.dft.descriptors import DESCRIPTORS, find_wcnmax_extremum, load_series
+from beckmann.dft.parse_cmo import classify_crossing
 from beckmann.dft.viz import OUTCOME_COLOR, plot_wcnmax_grid
 
 ANALYSIS_DIR = DATA_OUTPUT / "analysis"
@@ -120,11 +119,14 @@ def main() -> None:
 
     per_mol_series = {}
     extrema = {}
+    crossings = {}
     outcome_by_mol = {}
     pct_by_mol = {}
+    dft_opt_dir = DATA_OUTPUT / "dft_opt"
     for mol in mols:
         per_mol_series[mol] = load_series(mol, channel_rows)
         extrema[mol] = find_wcnmax_extremum(mol, extraction_rows)
+        crossings[mol] = classify_crossing(mol, extraction_rows, dft_opt_dir / mol)
         mol_id = mol.split("_")[1]
         meta = outcomes[f"mol_{mol_id}"]
         outcome_by_mol[mol] = meta["exp_outcome"]
@@ -144,8 +146,9 @@ def main() -> None:
 
     # ---- summary table ----
     lines = [
-        "| mol | exp | d(Ψ)/dR | d(log₁₀Λ)/dR | d(wCNmax)/dR | d(w17max)/dR | d(w78max)/dR | wCNmax extremum | dip depth |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "| mol | exp | d(Ψ)/dR | d(log₁₀Λ)/dR | d(wCNmax)/dR | d(w17max)/dR | d(w78max)/dR | "
+        "wCNmax extremum | dip depth | crossing classification |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for mol in mols:
         mol_id = mol.split("_")[1]
@@ -161,13 +164,21 @@ def main() -> None:
             )
             depth_str = f"{extremum_info['depth']:.4f}"
 
+        crossing = crossings.get(mol) or {}
+        crossing_label = crossing.get("label", "n/a")
+        if crossing.get("reason"):
+            crossing_str = f"{crossing_label} ({crossing['reason']})"
+        else:
+            crossing_str = crossing_label
+
         def fmt(key):
             val = slopes.get(key)
             return f"{float(val):.3f}" if val not in (None, "", "None") else "n/a"
 
         lines.append(
             f"| {mol} | {outcome} | {fmt('d_psi_dR')} | {fmt('d_log_lambda_dR')} | "
-            f"{fmt('d_wcnmax_dR')} | {fmt('d_w17max_dR')} | {fmt('d_w78max_dR')} | {extremum} | {depth_str} |"
+            f"{fmt('d_wcnmax_dR')} | {fmt('d_w17max_dR')} | {fmt('d_w78max_dR')} | {extremum} | "
+            f"{depth_str} | {crossing_str} |"
         )
 
     table = "\n".join(lines)
@@ -178,7 +189,15 @@ def main() -> None:
         "d/dR = least-squares slope over each molecule's N-O scan series. "
         "'wCNmax extremum' = interior local min/max in the wCNmax(R) series "
         "(the paper's central signature -- Table 2 reports this only for the one "
-        "rearranging reference compound, none of the three fragmenting ones).\n\n"
+        "rearranging reference compound, none of the three fragmenting ones). "
+        "'crossing classification' = beckmann.dft.parse_cmo.classify_crossing()'s "
+        "verdict on whether the wCNmax MO handoff is a CONFIRMED avoided crossing "
+        "(bracketed narrow eigenvalue gap between the identity-tracked pre/post-handoff "
+        "MO pair, AND roughly conserved CN weight across them) vs. an unconfirmed "
+        "handoff vs. no handoff at all. Across all 34 molecules the crossing partner is "
+        "consistently the N-O sigma*/sigma antibond, not the aryl-migrating C-C "
+        "antibond (data/output/analysis/cn_crossing_report.csv), so no aryl-coefficient "
+        "swap is checked.\n\n"
         + table + "\n"
     )
     print(f"\n-- wrote {summary_path}\n")

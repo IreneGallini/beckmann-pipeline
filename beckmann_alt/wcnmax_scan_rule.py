@@ -47,6 +47,11 @@ from beckmann_alt.pair_nbo import run_test_set_scan_series
 EXTRACTION_FIELDS = [
     "mol", "stage", "channel", "R_NO", "MO_index", "epsilon_i_star", "coefficient",
     "weight", "delta_lumo", "in_window",
+    # Winner (A)/runner-up (B) MO pair + the aryl-migrating C-C antibond's own
+    # coefficient at both -- see beckmann_alt.pair_nbo.run_test_set_scan_series()
+    # and beckmann.dft.descriptors.classify_crossing().
+    "MO_A", "MO_B", "eps_A", "eps_B", "CN_coeff_in_A", "CN_coeff_in_B",
+    "arylCC_coeff_in_A", "arylCC_coeff_in_B",
 ]
 RESULTS_FIELDS = [
     "mol", "exp", "NBO", "PySCF",

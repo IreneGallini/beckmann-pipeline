@@ -121,6 +121,10 @@ def local_pair_antibonds(
 
 
 def compute_wcnmax(mf, s: np.ndarray, iaos_orth: np.ndarray, atom_of_iao: np.ndarray, ci: int, ni: int) -> dict:
+    """Note: 'second' (the runner-up MO for the winning antibond candidate, from
+    project_virtuals_onto_livvo) is threaded through into the returned dict
+    unchanged -- the candidate-selection loop below (sigma*-like vs. pi*-like local
+    antibond) is a separate choice from MO-tracking and is untouched."""
     pair = local_pair_antibonds(mf, s, iaos_orth, atom_of_iao, ci, ni)
     best = None
     for occ, vec in zip(pair["candidate_occupations"], pair["candidates_ao"]):
@@ -132,18 +136,68 @@ def compute_wcnmax(mf, s: np.ndarray, iaos_orth: np.ndarray, atom_of_iao: np.nda
         "wmax": best["weight"], "mo_index": best["mo_index"],
         "epsilon": best["epsilon"], "coefficient": best["coefficient"],
         "antibond_occupation": best["antibond_occupation"],
+        "second": best["second"],
+    }
+
+
+def compute_aryl_coeff_at_mos(
+    mf, s: np.ndarray, iaos_orth: np.ndarray, atom_of_iao: np.ndarray,
+    ci: int, c_aryl: int, mo_indices: list[int],
+) -> dict[int, float]:
+    """The aryl-migrating C-C antibond's (local per-atom-pair candidate for (ci,
+    c_aryl), built with the exact same local_pair_antibonds() machinery
+    compute_wcnmax() uses for (ci, ni) -- it's already generic over any atom
+    pair) own signed coefficient projected onto specific, already-known MOs --
+    e.g. the CN channel's winning and runner-up MO indices -- rather than
+    searched for its own best match. Picks whichever local candidate
+    (sigma*-/pi*-like) gives the largest projected weight across the whole
+    virtual manifold once (mirroring compute_wcnmax's own candidate-selection
+    convention), then reports that one candidate's coefficient at each
+    requested MO index.
+
+    Returns {mo_index: coefficient} -- entries for None in mo_indices are
+    skipped (callers pass None when there's no runner-up MO, see
+    compute_wcnmax()'s 'second')."""
+    pair = local_pair_antibonds(mf, s, iaos_orth, atom_of_iao, ci, c_aryl)
+    best_weight = None
+    best_candidate = None
+    for vec in pair["candidates_ao"]:
+        proj = project_virtuals_onto_livvo(mf, s, vec)
+        if best_weight is None or proj["weight"] > best_weight:
+            best_weight, best_candidate = proj["weight"], vec
+
+    mo_coeff = mf.mo_coeff
+    return {
+        mo_index: mo_coeff[:, mo_index] @ s @ best_candidate
+        for mo_index in mo_indices
+        if mo_index is not None
     }
 
 
 def run_from_case(case: dict) -> dict:
     """Shared by run_case()/run_test_set_case() below -- everything from a loaded case
     dict (either shape, see beckmann_alt.geometry.load_case/load_test_set_case) through
-    to a wCNmax result."""
+    to a wCNmax result.
+
+    Also computes the aryl-migrating C-C antibond's own coefficient at the CN
+    channel's winning MO (and runner-up MO, if one exists) via
+    compute_aryl_coeff_at_mos() -- both loaders now always populate case["c_aryl"]
+    (beckmann_alt.geometry). Returned under "aryl_coeffs" as {mo_index: coefficient}."""
     mol = build_mol(case)
     mf = run_scf(mol)
     iaos_orth, s, atom_of_iao = build_local_iaos(mf)
     cn = compute_wcnmax(mf, s, iaos_orth, atom_of_iao, case["ci"], case["ni"])
-    return {"case": case["name"], "basis_note": case["basis_note"], "cn": cn}
+
+    mo_indices = [cn["mo_index"]]
+    if cn["second"] is not None:
+        mo_indices.append(cn["second"]["mo_index"])
+    aryl_coeffs = compute_aryl_coeff_at_mos(
+        mf, s, iaos_orth, atom_of_iao, case["ci"], case["c_aryl"], mo_indices,
+    )
+    return {
+        "case": case["name"], "basis_note": case["basis_note"], "cn": cn,
+        "aryl_coeffs": aryl_coeffs,
+    }
 
 
 def run_case(name: str) -> dict:
@@ -180,11 +234,22 @@ def run_test_set_scan_series(mol_id: str, stages: list[str] | None = None) -> li
     for case in cases:
         result = run_from_case(case)
         cn = result["cn"]
+        second = cn["second"]
+        aryl_coeffs = result["aryl_coeffs"]
         rows.append({
             "mol": case["name"], "stage": case["stage"], "channel": "cn",
             "R_NO": case["r_no"], "MO_index": cn["mo_index"],
             "epsilon_i_star": cn["epsilon"], "coefficient": cn["coefficient"],
             "weight": cn["wmax"], "delta_lumo": None, "in_window": None,
+            # Winner (A) / runner-up (B) MO pair for classify_crossing()'s
+            # avoided-crossing check (beckmann.dft.descriptors) -- see
+            # compute_wcnmax()'s 'second' and compute_aryl_coeff_at_mos().
+            "MO_A": cn["mo_index"], "MO_B": second["mo_index"] if second else None,
+            "eps_A": cn["epsilon"], "eps_B": second["epsilon"] if second else None,
+            "CN_coeff_in_A": cn["coefficient"],
+            "CN_coeff_in_B": second["coefficient"] if second else None,
+            "arylCC_coeff_in_A": aryl_coeffs.get(cn["mo_index"]),
+            "arylCC_coeff_in_B": aryl_coeffs.get(second["mo_index"]) if second else None,
         })
     return rows
 
