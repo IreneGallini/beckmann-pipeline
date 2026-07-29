@@ -4,12 +4,14 @@ Validate beckmann.dft.branch_tracking against reference logs
 
 Gate 1 (family-weight extraction, corrected/broadened per
 Detailed_Orbital_Character_Exchange_Handout.docx) is checked against Section 6's
-8 worked examples. Gate 2 (branch identity / candidate selection) does NOT
-currently reproduce Section 5's table -- a third MO (32, near-pure N17-O18
-"bond-breaking" character) wins top-2-by-w_target at s2/s3/s4 and crowds out the
-true C-C-side branch member (MO38); see the module docstring / conversation
-history for the full characterization. That gap is not hidden or corrected
-here -- both diagrams below are generated so the difference is visible:
+8 worked examples. Gate 2 (branch identity / candidate selection) reproduces
+Section 5's table exactly at all 4 points now that track_branches()'s candidate
+selection is restricted to positive-canonical-energy MOs -- see that function's
+docstring for why (a negative-energy N-O 'activation coordinate' MO was
+previously hijacking the ranking) and the caveat that this filter is an
+empirical finding validated only against this one 4-point case, not yet
+independently confirmed as Tetiana's actual rule. Both diagrams are still
+generated so the two can be compared directly:
   - branch_tracking_reference_v2.png       : track_branches()'s ACTUAL output
   - branch_tracking_reference_v2_expected.png : Section 5's ground-truth table,
     plotted the same way, for direct visual comparison

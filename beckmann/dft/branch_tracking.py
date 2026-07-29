@@ -156,13 +156,29 @@ def track_branches(
     logs, following handout Section 3's similarity-based reassignment instead of
     MO index or single-largest-coefficient.
 
-    At each geometry, the candidate pair is the top-2 MOs by w_target (matches the
-    handout's own seeding rule at the first point, applied at every point since
-    family weight is the ranking criterion throughout). At the first geometry,
-    candidates become branch A (higher w_target) and B directly. At every later
-    geometry, S_direct = S(A_old,cand1)+S(B_old,cand2) is compared against
-    S_swapped = S(A_old,cand2)+S(B_old,cand1) (_signed_dot() for S), and whichever
-    total is larger determines which candidate continues which branch.
+    At each geometry, the candidate pair is the top-2 MOs by w_target AMONG THOSE
+    WITH POSITIVE CANONICAL ENERGY, not the full virtual manifold. This positive-
+    energy filter is an empirical finding, not something either handout states
+    explicitly -- the handout's own virtual-orbital window is relative to the LUMO
+    (0 < eps_k - eps_LUMO <= 0.4 a.u.), which virtual_window() already enforces on
+    every MO passed in here; requiring the absolute eps_k > 0 on top of that is a
+    stricter, separate condition. Without it, top-2-by-w_target over the full
+    manifold lets a persistent, structurally unrelated MO (the N-O 'activation
+    coordinate' antibond, always negative-energy in the s2-s4 range of the
+    reference case) hijack a candidate slot and crowd out the true branch member --
+    see the plan this was built from for the full characterization. WITH the
+    filter, this reproduces the reference case's Section 5 table exactly at all 4
+    points (branch identity AND A/B order) -- but that's one 4-point validation,
+    not independent confirmation this is Tetiana's actual selection rule. Treat as
+    provisional until confirmed with her, especially before extending to molecules
+    where a candidate MO's energy sign relative to this cutoff isn't yet checked.
+
+    At the first geometry, candidates become branch A (higher w_target) and B
+    directly. At every later geometry, S_direct = S(A_old,cand1)+S(B_old,cand2) is
+    compared against S_swapped = S(A_old,cand2)+S(B_old,cand1) (_signed_dot() for
+    S), and whichever total is larger determines which candidate continues which
+    branch -- this comparison logic is unchanged from before the positive-energy
+    filter was added.
 
     Returns one row per scan point: {mo_A, E_A, f_CC_A, f_CN_A, mo_B, E_B,
     f_CC_B, f_CN_B}. E_* is in Hartree (convert with HARTREE_TO_EV for plotting)."""
@@ -179,7 +195,8 @@ def track_branches(
     a_mo = b_mo = None
     for log_path in scan_logs:
         weights = extract_family_weights(log_path, c1_atom, cn_c_atom, cn_n_atom)
-        by_target = sorted(weights, key=lambda m: m["w_target"], reverse=True)
+        candidates = [m for m in weights if m["energy"] > 0]
+        by_target = sorted(candidates, key=lambda m: m["w_target"], reverse=True)
         cand1, cand2 = by_target[0], by_target[1]
 
         if a_mo is None:
