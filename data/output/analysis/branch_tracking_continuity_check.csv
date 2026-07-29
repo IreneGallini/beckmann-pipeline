@@ -1,0 +1,5 @@
+point,R_NO,A_old_MO,B_old_MO,cand1_MO,cand2_MO,S_direct,S_swapped,winner,result_A_MO,result_B_MO,expected_MO1,expected_MO2,match
+s1,1.55,,,33,35,,,seed,33,35,33,35,True
+s2,1.7,33,35,32,35,-1.1928,0,S_swapped,35,32,35,38,False
+s3,1.75,35,32,32,35,0,1.0523,S_swapped,35,32,38,35,False
+s4,1.8,35,32,32,33,0,0.7821,S_swapped,33,32,38,35,False
