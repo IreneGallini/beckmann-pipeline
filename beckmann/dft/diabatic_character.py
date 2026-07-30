@@ -204,15 +204,23 @@ def _diabatic_row(rows: list[dict]) -> dict | None:
     rows. Shared by track_diabatic_character() (reference-case, per-log) and
     track_diabatic_character_series() (real molecule, per-point) so the
     selection rule exists in exactly one place. None if there are no rows
-    (e.g. an empty virtual window at that point)."""
+    (e.g. an empty virtual window at that point).
+
+    Alongside each MO's f_CC/f_CN fraction, also carries through its raw
+    (unnormalized) w_CC/w_CN weights (w_CC_CC/w_CN_CC for the max-w_CC MO,
+    w_CC_CN/w_CN_CN for the max-w_CN MO) -- the fraction alone can't
+    distinguish "strong absolute mixing" from "tiny w_target with an
+    equally tiny w_CN dominating it," so both are exposed."""
     if not rows:
         return None
     mo_cn = max(rows, key=lambda m: m["w_CN"])
     mo_cc = max(rows, key=lambda m: m["w_CC"])
     return {
         "mo_CN": mo_cn["mo"], "E_CN": mo_cn["energy"], "f_CN_CN": mo_cn["f_CN"],
+        "w_CC_CN": mo_cn["w_CC"], "w_CN_CN": mo_cn["w_CN"],
         "mo_CC": mo_cc["mo"], "E_CC": mo_cc["energy"],
         "f_CC_CC": mo_cc["f_CC"], "f_CN_CC": mo_cc["f_CN"],
+        "w_CC_CC": mo_cc["w_CC"], "w_CN_CC": mo_cc["w_CN"],
     }
 
 
@@ -321,11 +329,16 @@ def build_benchmark_character_exchange(
       detail_rows  -- one row per (molecule, scan point), every metric
                        track_diabatic_character_series() computes at that
                        point: {mol, exp_outcome, point, r_no, delta_R,
-                       mo_CC, E_CC, f_CC_CC, f_CN_CC, mo_CN, E_CN, f_CN_CN}.
-                       r_no is the point's actual R(N-O) in Angstroms;
-                       delta_R is relative to that molecule's OWN first scan
-                       point (typically its nbo/R0 stage, but see note
-                       below), not an absolute R(N-O).
+                       mo_CC, E_CC, w_CC_CC, w_CN_CC, f_CC_CC, f_CN_CC,
+                       mo_CN, E_CN, w_CC_CN, w_CN_CN, f_CN_CN}. r_no is the
+                       point's actual R(N-O) in Angstroms; delta_R is
+                       relative to that molecule's OWN first scan point
+                       (typically its nbo/R0 stage, but see note below), not
+                       an absolute R(N-O). w_CC_CC/w_CN_CC are the raw
+                       (unnormalized) family weights of the max-w_CC MO --
+                       f_CN_CC is just their ratio, and can't on its own
+                       distinguish strong absolute mixing from a tiny
+                       w_target dominated by an equally tiny w_CN.
       summary_rows -- one row per molecule: {mol, exp_outcome, f_CN_CC_start,
                        f_CN_CC_end, delta}, delta = f_CN_CC_start - f_CN_CC_end.
       failures     -- one row per molecule that didn't produce usable data:
@@ -379,8 +392,11 @@ def build_benchmark_character_exchange(
                 "mol": mol, "exp_outcome": outcome, "point": point,
                 "r_no": row["r_no"], "delta_R": row["r_no"] - r0,
                 "mo_CC": row["mo_CC"], "E_CC": row["E_CC"],
+                "w_CC_CC": row["w_CC_CC"], "w_CN_CC": row["w_CN_CC"],
                 "f_CC_CC": row["f_CC_CC"], "f_CN_CC": row["f_CN_CC"],
-                "mo_CN": row["mo_CN"], "E_CN": row["E_CN"], "f_CN_CN": row["f_CN_CN"],
+                "mo_CN": row["mo_CN"], "E_CN": row["E_CN"],
+                "w_CC_CN": row["w_CC_CN"], "w_CN_CN": row["w_CN_CN"],
+                "f_CN_CN": row["f_CN_CN"],
             })
         summary_rows.append({
             "mol": mol, "exp_outcome": outcome,
