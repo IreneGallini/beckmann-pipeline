@@ -318,11 +318,14 @@ def build_benchmark_character_exchange(
     need.
 
     Returns (detail_rows, summary_rows, failures):
-      detail_rows  -- one row per (molecule, scan point): {mol, exp_outcome,
-                       point, delta_R, f_CN_CC, mo_CC, E_CC}. delta_R is
-                       relative to that molecule's OWN first scan point
-                       (typically its nbo/R0 stage, but see note below), not
-                       an absolute R(N-O).
+      detail_rows  -- one row per (molecule, scan point), every metric
+                       track_diabatic_character_series() computes at that
+                       point: {mol, exp_outcome, point, r_no, delta_R,
+                       mo_CC, E_CC, f_CC_CC, f_CN_CC, mo_CN, E_CN, f_CN_CN}.
+                       r_no is the point's actual R(N-O) in Angstroms;
+                       delta_R is relative to that molecule's OWN first scan
+                       point (typically its nbo/R0 stage, but see note
+                       below), not an absolute R(N-O).
       summary_rows -- one row per molecule: {mol, exp_outcome, f_CN_CC_start,
                        f_CN_CC_end, delta}, delta = f_CN_CC_start - f_CN_CC_end.
       failures     -- one row per molecule that didn't produce usable data:
@@ -374,8 +377,10 @@ def build_benchmark_character_exchange(
         for point, row in enumerate(rows, start=1):
             detail_rows.append({
                 "mol": mol, "exp_outcome": outcome, "point": point,
-                "delta_R": row["r_no"] - r0, "f_CN_CC": row["f_CN_CC"],
+                "r_no": row["r_no"], "delta_R": row["r_no"] - r0,
                 "mo_CC": row["mo_CC"], "E_CC": row["E_CC"],
+                "f_CC_CC": row["f_CC_CC"], "f_CN_CC": row["f_CN_CC"],
+                "mo_CN": row["mo_CN"], "E_CN": row["E_CN"], "f_CN_CN": row["f_CN_CN"],
             })
         summary_rows.append({
             "mol": mol, "exp_outcome": outcome,
