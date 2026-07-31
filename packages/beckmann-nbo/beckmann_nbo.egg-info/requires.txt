@@ -1,2 +1,0 @@
-beckmann-core==0.1.0
-rdkit>=2022.03.1
