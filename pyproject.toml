@@ -1,17 +1,4 @@
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "beckmann"
-version = "0.1.0"
-requires-python = ">=3.11"
-
-[project.scripts]
-beckmann-oximes     = "beckmann.oximes:main"
-beckmann-conformers = "beckmann.conformers:main"
-beckmann-optimize   = "beckmann.optimize:main"
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["beckmann*"]
+[tool.pytest.ini_options]
+markers = [
+    "slow: runs real Auto3D/AIMNet2/PySCF (minutes, not seconds)",
+]

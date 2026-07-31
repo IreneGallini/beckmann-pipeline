@@ -1,0 +1,6 @@
+rdkit>=2022.03.1
+numpy
+auto3d
+torch
+ase
+aimnet

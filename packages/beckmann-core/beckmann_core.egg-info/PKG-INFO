@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: beckmann-core
+Version: 0.1.0
+Summary: Shared, Gaussian/NBO7/PySCF-agnostic Beckmann rearrangement library: oxime conversion, conformer generation, AIMNet2 geometry optimization, shared geometry primitives, the classical anti-periplanar baseline, and the wCNmax-minimum R/F rule.
+Requires-Python: >=3.11
+Requires-Dist: rdkit>=2022.03.1
+Requires-Dist: numpy
+Requires-Dist: auto3d
+Requires-Dist: torch
+Requires-Dist: ase
+Requires-Dist: aimnet

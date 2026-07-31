@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: beckmann-pyscf
+Version: 0.1.0
+Summary: Open-source, HPC-free Beckmann rearrangement predictor: SMILES -> AIMNet2 geometry -> PySCF-native wCNmax scan -> R/F prediction. Flask web UI. No Gaussian, no NBO7, no Citadel.
+Requires-Python: >=3.11
+Requires-Dist: beckmann-core==0.1.0
+Requires-Dist: pyscf
+Requires-Dist: flask
+Requires-Dist: matplotlib

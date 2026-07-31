@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "beckmann-pyscf"
+version = "0.1.0"
+description = "Open-source, HPC-free Beckmann rearrangement predictor: SMILES -> AIMNet2 geometry -> PySCF-native wCNmax scan -> R/F prediction. Flask web UI. No Gaussian, no NBO7, no Citadel."
+requires-python = ">=3.11"
+dependencies = [
+    "beckmann-core==0.1.0",
+    "pyscf",
+    "flask",
+    "matplotlib",
+]
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+include = ["beckmann_pyscf*"]

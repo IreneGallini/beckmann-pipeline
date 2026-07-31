@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "beckmann-core"
+version = "0.1.0"
+description = "Shared, Gaussian/NBO7/PySCF-agnostic Beckmann rearrangement library: oxime conversion, conformer generation, AIMNet2 geometry optimization, shared geometry primitives, the classical anti-periplanar baseline, and the wCNmax-minimum R/F rule."
+requires-python = ">=3.11"
+dependencies = [
+    "rdkit>=2022.03.1",
+    "numpy",
+    "auto3d",
+    "torch",
+    "ase",
+    "aimnet",
+]
+
+[tool.setuptools.packages.find]
+include = ["beckmann_core*"]

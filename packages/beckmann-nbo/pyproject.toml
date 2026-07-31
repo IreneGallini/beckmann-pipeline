@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "beckmann-nbo"
+version = "0.1.0"
+description = "Gaussian/NBO7/Citadel product for the Beckmann rearrangement pipeline: DFT input generation, HPC submission, NBO7 log parsing, and NBO-specific descriptors (Psi, Lambda)."
+requires-python = ">=3.11"
+dependencies = [
+    "beckmann-core==0.1.0",
+    "rdkit>=2022.03.1",
+]
+
+[tool.setuptools.packages.find]
+include = ["beckmann_nbo*"]

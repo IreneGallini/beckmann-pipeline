@@ -1,0 +1,4 @@
+beckmann-core==0.1.0
+pyscf
+flask
+matplotlib
