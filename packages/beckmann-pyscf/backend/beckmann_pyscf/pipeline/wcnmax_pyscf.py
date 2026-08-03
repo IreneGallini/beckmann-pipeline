@@ -10,7 +10,9 @@ work -- this module is assembly, not new science:
   - beckmann.dft.geometry.displace_leaving_group() -- the same rigid
     pre-displacement the Gaussian rigid-scan architecture
     (beckmann.dft.inputs._scan_gjf_rigid) uses to build each scan point's
-    starting geometry from a single fixed base structure.
+    starting geometry from a single fixed base structure. Handles negative
+    delta (compression) the same as positive (stretching) -- pure signed
+    vector math along the N->O unit vector.
   - beckmann.optimize.relax_geometry(..., restraints=[(ni, oi, target_R, k)])
     -- the harmonic-bond-restraint constrained-relaxation pattern already
     validated in beckmann.dft.ts_products for holding one bond near a target
@@ -20,24 +22,45 @@ work -- this module is assembly, not new science:
     "comparable order-of-magnitude to a real bond force constant") rather
     than an invented number.
 
+Scan window is a FIXED ABSOLUTE R(N-O) range (FIXED_R_MIN..FIXED_R_MAX),
+the same for every molecule -- not anchored to each molecule's own AIMNet2-
+optimized equilibrium R0. AIMNet2's unconstrained R0 is systematically
+longer than the corresponding DFT-optimized R0 (confirmed directly: mol_006
+AIMNet2 R0=1.664 A vs. Gaussian R0=1.511 A, a ~0.15 A gap), while NBO7's
+trusted 34-molecule data shows the actual wCNmax-minimum crossing clustering
+tightly at 1.594-1.703 A (mean 1.659, std 0.025) regardless of molecule. An
+R0-anchored, outward-only scan starts already inside or past that window for
+molecules like mol_006 and can never bracket the crossing as an interior
+point. The fixed window here (1.50-1.80 A) pads ~0.09-0.10 A beyond the
+observed NBO7 range on each side so the crossing lands as a genuine interior
+scan point regardless of where any given molecule's own AIMNet2 R0 falls.
+
 beckmann_alt.pair_nbo.run_from_case() itself is imported and called
 unmodified -- nothing here changes its wCNmax computation logic. Its case
 dict shape (atom_spec/charge/spin/ci/ni/c_aryl/name/basis_note) already
 doesn't reference TEST_IDS/ALL_IDS anywhere in the function bodies, so no
 interface change was needed to point it at a brand-new molecule instead of a
 benchmark one.
+
+Every run_from_case() call below goes through pyscf_subprocess.run_pyscf_isolated()
+instead of calling it directly -- PyTorch (AIMNet2, used earlier in this same
+loop) and PySCF's own BLAS/OpenMP runtime conflict when both are resident in
+one process, confirmed to segfault PySCF's SCF reproducibly. See
+pyscf_subprocess.py's module docstring for the full story.
 """
+import time
+
 from aimnet.calculators import AIMNet2Calculator
 from ase import Atoms
 from rdkit import Chem
 
 from beckmann_core.geometry import displace_leaving_group, no_distance
 from beckmann_core.optimize import relax_geometry
-from beckmann_pyscf.engine.pair_nbo import run_from_case
+from beckmann_pyscf.pipeline.pyscf_subprocess import run_pyscf_isolated
 
-STEP = 0.05
-N_POINTS = 6  # matches beckmann.dft.inputs._scan_gjf_rigid's current default
-              # (R0+0.05 .. R0+0.30 A) for comparability with the trusted series
+FIXED_R_MIN = 1.50  # Angstrom -- see module docstring for why this is fixed/absolute, not R0-relative
+FIXED_R_MAX = 1.80
+FIXED_R_STEP = 0.05  # same point density as the original R0-relative scan (7 points total)
 RESTRAINT_K = 15.0  # eV/A^2 -- beckmann.dft.ts_products.RESTRAINT_K's own value
 
 
@@ -92,13 +115,17 @@ def _row_from_case_result(case: dict, result: dict) -> dict:
 
 def run_scan_series(
     mol: Chem.Mol, ci: int, ni: int, oi: int, c_aryl: int, c_alkyl: int, name: str,
-    step: float = STEP, n_points: int = N_POINTS,
+    r_min: float = FIXED_R_MIN, r_max: float = FIXED_R_MAX, r_step: float = FIXED_R_STEP,
 ) -> list[dict]:
-    """R0 point ('nbo' stage) + n_points rigid-scan points ('scan_1'..
-    'scan_N'), each a fresh PySCF wCNmax single-point
-    (beckmann_pyscf.engine.pair_nbo.run_from_case, unmodified) evaluated on
-    its own AIMNet2-relaxed geometry. ci/ni/oi/c_aryl/c_alkyl are 1-based
-    (RDKit index + 1), typically from
+    """Fixed-absolute-window R(N-O) scan: one row per target in
+    [r_min, r_max] stepped by r_step (7 points by default: r_min is the
+    'nbo'-stage row, the rest are 'scan_1'..'scan_N'), each a fresh PySCF
+    wCNmax single-point (beckmann_pyscf.engine.pair_nbo.run_from_case,
+    unmodified, via pyscf_subprocess.run_pyscf_isolated) evaluated on its own
+    AIMNet2-relaxed geometry, restrained toward that target R(N-O) the same
+    way at every point -- see module docstring for why the window is fixed/
+    absolute rather than anchored to this molecule's own AIMNet2 R0.
+    ci/ni/oi/c_aryl/c_alkyl are 1-based (RDKit index + 1), typically from
     beckmann_core.classical.get_oxime_atoms(mol) + 1.
 
     Returns rows ready for beckmann.dft.descriptors.find_wcnmax_minimum().
@@ -108,16 +135,19 @@ def run_scan_series(
     numbers = [atom.GetAtomicNum() for atom in mol.GetAtoms()]
     base_atoms = _mol_to_atom_tuples(mol)
     r0 = no_distance(base_atoms, ni, oi)
+    print(f"  [scan] AIMNet2 equilibrium R(N-O) = {r0:.4f} A "
+          f"(fixed scan window {r_min:.2f}-{r_max:.2f} A, diagnostic only -- not the scan anchor)", flush=True)
+
+    n_steps = round((r_max - r_min) / r_step)
+    targets = [r_min + i * r_step for i in range(n_steps + 1)]
 
     rows = []
-    r0_case = _case_from_atoms(base_atoms, ci, ni, c_aryl, c_alkyl, charge, spin, name, "nbo", r0)
-    rows.append(_row_from_case_result(r0_case, run_from_case(r0_case)))
-
     base_calc = AIMNet2Calculator("aimnet2_2025")
-    for pt in range(1, n_points + 1):
-        delta = pt * step
+    for pt, target_r in enumerate(targets, start=1):
+        stage = "nbo" if pt == 1 else f"scan_{pt - 1}"
+        delta = target_r - r0
         displaced = displace_leaving_group(base_atoms, ni, oi, delta)
-        target_r = r0 + delta
+        print(f"  [scan] point {pt}/{len(targets)}: target R(N-O) = {target_r:.4f} A, relaxing with AIMNet2...", flush=True)
 
         atoms_obj = Atoms(numbers=numbers, positions=[(x, y, z) for _, x, y, z in displaced])
         # HarmonicBondRestraint indexes directly into atoms.get_positions(),
@@ -125,18 +155,29 @@ def run_scan_series(
         # this module (matching displace_leaving_group/no_distance), so
         # convert here only, same as beckmann.dft.ts_products does at its
         # own restraints-list call sites.
-        atoms_obj, _ = relax_geometry(
+        t_relax = time.perf_counter()
+        atoms_obj, _, converged = relax_geometry(
             atoms_obj, charge=charge, base_calc=base_calc,
             restraints=[(ni - 1, oi - 1, target_r, RESTRAINT_K)],
         )
+        relax_elapsed = time.perf_counter() - t_relax
         relaxed_tuples = [
             (sym, *pos) for (sym, *_), pos in zip(displaced, atoms_obj.get_positions())
         ]
         actual_r = no_distance(relaxed_tuples, ni, oi)
+        if not converged:
+            print(f"    WARNING: relaxation did not converge within max_steps ({relax_elapsed:.1f}s)", flush=True)
+        print(f"    relaxed: R(N-O) = {actual_r:.4f} A (target {target_r:.4f}, "
+              f"delta {actual_r - target_r:+.4f}), {relax_elapsed:.1f}s", flush=True)
 
         case = _case_from_atoms(
-            relaxed_tuples, ci, ni, c_aryl, c_alkyl, charge, spin, name, f"scan_{pt}", actual_r,
+            relaxed_tuples, ci, ni, c_aryl, c_alkyl, charge, spin, name, stage, actual_r,
         )
-        rows.append(_row_from_case_result(case, run_from_case(case)))
+        t_pyscf = time.perf_counter()
+        result = run_pyscf_isolated(case)
+        pyscf_elapsed = time.perf_counter() - t_pyscf
+        rows.append(_row_from_case_result(case, result))
+        print(f"    wCNmax = {result['cn']['wmax']:.4f} at MO{result['cn']['mo_index']} "
+              f"({pyscf_elapsed:.1f}s)", flush=True)
 
     return rows

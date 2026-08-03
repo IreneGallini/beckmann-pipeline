@@ -9,7 +9,7 @@ description = "Gaussian/NBO7/Citadel product for the Beckmann rearrangement pipe
 requires-python = ">=3.11"
 dependencies = [
     "beckmann-core==0.1.0",
-    "rdkit>=2022.03.1",
+    "rdkit==2026.3.3",
 ]
 
 [tool.setuptools.packages.find]

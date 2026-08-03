@@ -13,7 +13,6 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")  # must be set before Auto
 
 def test_core_imports():
     import ase  # noqa: F401
-    import matplotlib  # noqa: F401
     import numpy  # noqa: F401
     import rdkit  # noqa: F401
 

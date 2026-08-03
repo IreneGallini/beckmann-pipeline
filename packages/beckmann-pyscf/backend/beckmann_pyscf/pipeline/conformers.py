@@ -19,11 +19,13 @@ from beckmann_core.conformers import generate_conformers
 from beckmann_core.oximes import enumerate_ez, ketone_to_protonated_oximes
 
 
-def smiles_to_oxime_smi(smiles: str, workdir: Path, mol_name: str = "query") -> Path:
-    """Ketone SMILES -> a .smi file with one line per E/Z oxime isomer, named
-    '{mol_name}_E'/'{mol_name}_Z' (matches beckmann.run_prediction()'s own
-    naming for a single new molecule). Raises ValueError if RDKit can't
-    parse the SMILES, or if no ketone/oxime-convertible group is found."""
+def parse_and_check_ketone(smiles: str) -> tuple[Chem.Mol, list[Chem.Mol]]:
+    """(mol, oximes). Raises ValueError if RDKit can't parse the SMILES, or
+    if no ketone/oxime-convertible group is found. Factored out so
+    pipeline.validate_smiles() (the fast synchronous pre-check app.py's
+    /submit runs before spending any real compute) and
+    smiles_to_oxime_smi() below share exactly one implementation of this
+    check rather than drifting apart."""
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         raise ValueError(f"RDKit cannot parse SMILES: {smiles!r}")
@@ -31,6 +33,16 @@ def smiles_to_oxime_smi(smiles: str, workdir: Path, mol_name: str = "query") -> 
     oximes = ketone_to_protonated_oximes(mol)
     if not oximes:
         raise ValueError("No oxime products found -- is this a ketone SMILES?")
+
+    return mol, oximes
+
+
+def smiles_to_oxime_smi(smiles: str, workdir: Path, mol_name: str = "query") -> Path:
+    """Ketone SMILES -> a .smi file with one line per E/Z oxime isomer, named
+    '{mol_name}_E'/'{mol_name}_Z' (matches beckmann.run_prediction()'s own
+    naming for a single new molecule). Raises ValueError if RDKit can't
+    parse the SMILES, or if no ketone/oxime-convertible group is found."""
+    _, oximes = parse_and_check_ketone(smiles)
 
     smi_path = workdir / f"{mol_name}.smi"
     with open(smi_path, "w") as f:

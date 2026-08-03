@@ -1,0 +1,11 @@
+%chk=mol_999_I.chk
+%nprocshared=1
+%mem=2GB
+#p wB97XD/6-311+G(d,p) sp
+
+iodine basis-assignment test (single atom, no solvent needed)
+
+0 2
+I   0.00000000   0.00000000   0.00000000
+
+

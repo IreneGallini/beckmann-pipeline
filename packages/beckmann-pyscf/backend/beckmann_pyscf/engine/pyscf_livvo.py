@@ -36,7 +36,17 @@ Known, deliberate deviations from Gaussian (do not silently treat as equivalent)
     standard, well-controlled approximation to the two-electron integrals, not
     expected to be a significant source of divergence -- but it is a deviation from
     Gaussian's conventional (non-DF) SCF and is flagged here for completeness.
+  - Bromine basis: no published 6-311+G(d,p) diffuse ("+") extension for Br exists
+    anywhere in Basis Set Exchange's catalog (every 6-311+G/6-311++G variant checked
+    directly, confirmed missing) -- not a PySCF packaging gap, a real gap in the
+    published basis. build_mol() below substitutes a locally vendored Br definition
+    extracted directly from Gaussian 16's own internal library (gfinput/gfprint on
+    real project geometries, cross-validated identical across two independent
+    molecules -- see basis_data/br_gaussian_6-311+Gdp.dat's header for full
+    provenance) for Br specifically; every other element is completely unaffected.
 """
+from pathlib import Path
+
 from pyscf import dft, gto, solvent
 from pyscf.scf import dispersion
 
@@ -44,6 +54,9 @@ WINDOW_AU = 0.4  # LUMO .. LUMO + WINDOW_AU, same window convention as beckmann/
                  # -- kept only as a diagnostic on the returned result, see
                  # project_virtuals_onto_livvo's docstring for why the search itself
                  # isn't capped to this window.
+
+_BASIS_DATA_DIR = Path(__file__).resolve().parent / "basis_data"
+_BR_BASIS_PATH = _BASIS_DATA_DIR / "br_gaussian_6-311+Gdp.dat"
 
 
 def _enable_wb97xd() -> None:
@@ -53,6 +66,15 @@ def _enable_wb97xd() -> None:
 
 
 def build_mol(case: dict, basis: str = "6-311+g(d,p)") -> gto.Mole:
+    """basis stays a plain string for every element except Br (see module
+    docstring for why Br needs a locally vendored substitute) -- when Br is
+    present in atom_spec, basis becomes a per-element dict instead.
+    PySCF's own basis-dict handling (gto/mole.py's _parse_default_basis)
+    natively fills in every other present element via the "default" key,
+    so this is additive only: no other element's basis construction changes."""
+    elements = {sym for sym, _ in case["atom_spec"]}
+    if "Br" in elements:
+        basis = {"default": basis, "Br": gto.basis.parse(_BR_BASIS_PATH.read_text())}
     return gto.M(
         atom=case["atom_spec"], basis=basis,
         charge=case["charge"], spin=case["spin"],

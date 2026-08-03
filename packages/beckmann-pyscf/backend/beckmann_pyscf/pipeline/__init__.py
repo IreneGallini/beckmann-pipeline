@@ -23,10 +23,24 @@ from rdkit import Chem
 
 from beckmann_core.classical import get_oxime_atoms
 
-from beckmann_pyscf.pipeline.conformers import run_conformers, smiles_to_oxime_smi
+from beckmann_pyscf.pipeline.conformers import parse_and_check_ketone, run_conformers, smiles_to_oxime_smi
 from beckmann_pyscf.pipeline.optimize import run_optimize
-from beckmann_pyscf.pipeline.predict import plot_wcnmax_series, predict_outcome
+from beckmann_pyscf.pipeline.predict import predict_outcome
 from beckmann_pyscf.pipeline.wcnmax_pyscf import run_scan_series
+
+
+def validate_smiles(smiles: str) -> str | None:
+    """Fast synchronous pre-check: does this SMILES parse and contain a
+    ketone/oxime-convertible group? Returns an error message string if
+    not, None if it's fine to proceed. Backed by the exact same check
+    predict() itself runs first (via parse_and_check_ketone()) -- calling
+    this before submitting a job lets a bad SMILES fail in milliseconds
+    instead of after minutes of Auto3D/AIMNet2/PySCF compute."""
+    try:
+        parse_and_check_ketone(smiles)
+        return None
+    except ValueError as e:
+        return str(e)
 
 
 def predict(smiles: str, workdir: Path | None = None) -> dict:
@@ -38,7 +52,6 @@ def predict(smiles: str, workdir: Path | None = None) -> dict:
           "wcnmax_series": [{"stage", "R_NO", "weight", "MO_index"}, ...],
           "prediction": "R" | "F",
           "minimum": dict | None,       # find_wcnmax_minimum()'s result, None if no interior minimum
-          "plot_png_base64": str,
         }
     Raises ValueError for an unparseable SMILES or a SMILES with no
     ketone/oxime-convertible group. Any other failure (Auto3D/AIMNet2/PySCF)
@@ -71,7 +84,6 @@ def predict(smiles: str, workdir: Path | None = None) -> dict:
         )
 
         prediction, minimum = predict_outcome("query", rows)
-        plot_png_base64 = plot_wcnmax_series("query", rows)
         energy = float(best_mol.GetProp("E_aimnet2_eV")) if best_mol.HasProp("E_aimnet2_eV") else None
 
         return {
@@ -84,7 +96,6 @@ def predict(smiles: str, workdir: Path | None = None) -> dict:
             ],
             "prediction": prediction,
             "minimum": minimum,
-            "plot_png_base64": plot_png_base64,
         }
     finally:
         if _cleanup:

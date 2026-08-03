@@ -63,16 +63,26 @@ def relax_geometry(
     model: str = "aimnet2_2025",
     base_calc: AIMNet2Calculator | None = None,
     fmax: float = 0.05,
+    max_steps: int = 300,
     restraints: list[tuple[int, int, float, float]] | None = None,
-) -> tuple[Atoms, float]:
+) -> tuple[Atoms, float, bool]:
     """Relax an ASE Atoms object in place with AIMNet2/LBFGS.
 
-    Returns (relaxed_atoms, energy_ev). Pass a pre-built base_calc to avoid reloading
-    model weights across repeated calls. Pass `restraints` (atom_i, atom_j,
-    target_distance, k) pairs to bias specific bond distances toward a target during
-    this relaxation -- e.g. to hold a forming/breaking bond away from the reactant's
-    own value so the optimizer can't just roll back downhill into it.
+    Returns (relaxed_atoms, energy_ev, converged). Pass a pre-built base_calc to
+    avoid reloading model weights across repeated calls. Pass `restraints` (atom_i,
+    atom_j, target_distance, k) pairs to bias specific bond distances toward a
+    target during this relaxation -- e.g. to hold a forming/breaking bond away from
+    the reactant's own value so the optimizer can't just roll back downhill into it.
     energy_ev is the AIMNet2 energy alone (restraint bias excluded).
+
+    max_steps bounds LBFGS -- ASE's own default (steps=100000000 if unspecified) is
+    effectively unbounded, and a restrained relaxation has no guaranteed joint
+    convergence between the AIMNet2 forces and the harmonic bias (they're just summed
+    via SumCalculator, not solved as a real constraint), so an unbounded run can
+    genuinely hang rather than fail loudly. Not converging within max_steps doesn't
+    raise -- unlike a non-converged SCF, a step-capped LBFGS run still usually
+    returns a reasonable, near-relaxed geometry, so it's on the caller to decide
+    whether/how to report `converged=False`.
     """
     if base_calc is None:
         base_calc = AIMNet2Calculator(model)
@@ -82,9 +92,9 @@ def relax_geometry(
     else:
         atoms.calc = aimnet_calc
     opt = LBFGS(atoms, logfile=None)
-    opt.run(fmax=fmax)
+    converged = opt.run(fmax=fmax, steps=max_steps)
     energy_ev = aimnet_calc.results["energy"]
-    return atoms, energy_ev
+    return atoms, energy_ev, converged
 
 
 def select_and_optimize(
@@ -133,7 +143,9 @@ def select_and_optimize(
             atoms   = Atoms(numbers=numbers, positions=coords)
 
             mol_charge = sum(atom.GetFormalCharge() for atom in mol.GetAtoms())
-            atoms, energy_ev = relax_geometry(atoms, charge=mol_charge, base_calc=base_calc)
+            atoms, energy_ev, converged = relax_geometry(atoms, charge=mol_charge, base_calc=base_calc)
+            if not converged:
+                print(f"    WARNING: AIMNet2 relaxation for {name} did not converge within max_steps")
             energy_kcal = energy_ev * 23.0605
 
             new_conf = mol.GetConformer()

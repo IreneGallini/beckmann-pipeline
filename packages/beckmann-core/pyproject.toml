@@ -8,12 +8,12 @@ version = "0.1.0"
 description = "Shared, Gaussian/NBO7/PySCF-agnostic Beckmann rearrangement library: oxime conversion, conformer generation, AIMNet2 geometry optimization, shared geometry primitives, the classical anti-periplanar baseline, and the wCNmax-minimum R/F rule."
 requires-python = ">=3.11"
 dependencies = [
-    "rdkit>=2022.03.1",
-    "numpy",
-    "auto3d",
-    "torch",
-    "ase",
-    "aimnet",
+    "rdkit==2026.3.3",
+    "numpy==2.4.6",
+    "auto3d==2.3.1",
+    "torch==2.12.0",
+    "ase==3.28.0",
+    "aimnet==0.2.0",
 ]
 
 [tool.setuptools.packages.find]
