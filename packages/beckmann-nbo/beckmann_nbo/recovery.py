@@ -49,23 +49,61 @@ class RemediationPlan:
     kwargs: dict
 
 
+def describe_status(mol: str, base_dir: Path, stepscan_root: Path | None = None) -> dict:
+    """Read-only report of a molecule's Stage 3 recovery state -- the same
+    RUNGS walk plan_next_attempt() does internally, but returning a
+    structured description instead of "what to run next", so a status/report
+    command can distinguish clean success, in-progress recovery, resolved
+    recovery (and which rung fixed it), and an exhausted ladder, none of
+    which plan_next_attempt()'s None-collapsing return value can tell apart
+    on its own.
+
+    Returns {"needed_recovery": bool, "rung": str | None, "resolved": bool}:
+      - not oscillating (clean pass OR a different, unhandled failure mode):
+        needed_recovery=False, rung=None, resolved=(True iff clean NORMAL).
+      - oscillating, ladder not yet exhausted, no rung has succeeded yet:
+        needed_recovery=True, rung=None, resolved=False.
+      - oscillating, resolved by rung X: needed_recovery=True, rung=X, resolved=True.
+      - oscillating, all three rungs tried and still failing:
+        needed_recovery=True, rung=None, resolved=False (same shape as
+        "not yet exhausted" -- callers wanting to distinguish the two should
+        additionally check whether all three rungs' logs already exist).
+    """
+    stepscan_root = stepscan_root or step_scan_dir()
+    diag = classify_log(base_dir / f"{mol}_scan.log", stage="scan")
+    if diag.category != FailureCategory.OSCILLATING_DEGENERACY:
+        return {
+            "needed_recovery": False,
+            "rung": None,
+            "resolved": diag.category == FailureCategory.NORMAL,
+        }
+
+    for rung_name, _ in RUNGS:
+        candidate_log = stepscan_root / f"{mol}_{rung_name}" / f"{mol}_{rung_name}_scan.log"
+        if not candidate_log.exists():
+            break
+        rung_diag = classify_log(candidate_log, stage="scan")
+        if rung_diag.category == FailureCategory.NORMAL:
+            return {"needed_recovery": True, "rung": rung_name, "resolved": True}
+        # this rung was tried and is still failing -- keep walking the ladder
+
+    return {"needed_recovery": True, "rung": None, "resolved": False}
+
+
 def plan_next_attempt(mol: str, base_dir: Path, stepscan_root: Path | None = None) -> RemediationPlan | None:
     """Decide the next escalation rung for one molecule, or None if there's
     nothing automated to do (not oscillating, already resolved, or every
     rung already exhausted -- all three read as "leave it, needs a human").
     """
     stepscan_root = stepscan_root or step_scan_dir()
-    diag = classify_log(base_dir / f"{mol}_scan.log", stage="scan")
-    if diag.category != FailureCategory.OSCILLATING_DEGENERACY:
+    status = describe_status(mol, base_dir, stepscan_root)
+    if not status["needed_recovery"] or status["resolved"]:
         return None
 
     for rung_name, kwargs in RUNGS:
         candidate_dir = stepscan_root / f"{mol}_{rung_name}"
         candidate_log = candidate_dir / f"{mol}_{rung_name}_scan.log"
         if candidate_log.exists():
-            rung_diag = classify_log(candidate_log, stage="scan")
-            if rung_diag.category == FailureCategory.NORMAL:
-                return None  # already resolved by an earlier run of this ladder
             continue  # this rung was tried and is still failing -- escalate
         return RemediationPlan(
             mol=mol, rung=rung_name, name=f"{mol}_{rung_name}",

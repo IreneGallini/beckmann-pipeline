@@ -1,0 +1,2 @@
+[console_scripts]
+beckmann-nbo = beckmann_nbo.cli:main

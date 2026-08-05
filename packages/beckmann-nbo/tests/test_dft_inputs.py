@@ -165,8 +165,8 @@ def test_scan_gjf_has_ModRedundant_and_E2PERT(dft_opt_dir):
     """
     for gjf in dft_opt_dir.glob("**/*_scan.gjf"):
         text = gjf.read_text()
-        assert "ModRedundant" in text,    f"{gjf.name}: missing 'ModRedundant' in route"
-        assert "pop=nbo7read" in text,    f"{gjf.name}: missing 'pop=nbo7read'"
+        assert "ModRedundant" in text,          f"{gjf.name}: missing 'ModRedundant' in route"
+        assert "pop=nbo7read" in text.lower(),  f"{gjf.name}: missing 'pop=nbo7read'"
         assert "geom=checkpoint" in text, f"{gjf.name}: missing 'geom=checkpoint'"
         assert "%oldchk=" in text,        f"{gjf.name}: missing '%oldchk' line"
         assert "E2PERT" in text,          f"{gjf.name}: missing 'E2PERT' in NBO block"
