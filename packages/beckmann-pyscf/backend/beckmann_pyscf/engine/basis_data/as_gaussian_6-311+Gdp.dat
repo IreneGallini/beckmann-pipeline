@@ -1,0 +1,93 @@
+#----------------------------------------------------------------------
+# Arsenic (As, Z=33) 6-311+G(d,p) basis -- extracted directly from
+# Gaussian 16's own internal basis library, not sourced externally.
+#
+# Provenance: found while auditing basis coverage for every element
+# AIMNet2-ASE supports (see data/output/analysis/heteroatom_basis_coverage.csv),
+# not reactively -- no published/BSE-curated 6-311+G(d,p) diffuse extension
+# for As exists anywhere in Basis Set Exchange's catalog (every 6-311+G/
+# 6-311++G variant checked directly; BSE's own diffuse-only "6-311+G" basis
+# stops at Z=20/Ca, same systematic gap already documented for Br). This
+# block was instead extracted via `gfinput gfprint` single-point jobs run
+# on Citadel (igallini@citadel.chem.cmu.edu) on 2026-08-04, using a bare
+# As atom (charge 0, multiplicity 4 -- ground-state 4S term, [Ar]3d10 4s2
+# 4p3), route line `#p wB97XD/6-311+G(d,p) sp gfinput gfprint
+# scrf=(smd,solvent=water)` (exact project-standard FUNCTIONAL/BASIS/
+# SOLVENT from packages/beckmann-nbo/beckmann_nbo/config.py). Two
+# independent runs (As_gfprint.log, As_gfprint_check2.log under
+# data/output/dft_gfprint/As_atom/) printed a byte-for-byte identical
+# basis block -- cross-checked directly, not assumed.
+#
+# The core/valence S/P/D shells below match Basis Set Exchange's
+# independently-verified 6-311G(d,p) As entry exactly (confirmed by direct
+# comparison). The one addition is the final SP shell (exponent 0.026),
+# Gaussian's own diffuse "+" function for As -- structurally consistent
+# with Br's existing diffuse shell in this same directory (single SP
+# shell, coefficients 1.0/1.0) and with the expected periodic trend: As
+# (Z=33, one column left of Br within period 4, larger atomic radius) has
+# a smaller/more diffuse exponent (0.026) than Br's (0.035), matching
+# Cl -> Br's own decreasing trend down group 17 (0.0483 -> 0.035, from
+# PySCF's bundled 6-311G-diffuse.dat).
+#
+# Raw logs this was extracted from:
+# data/output/dft_gfprint/As_atom/As_gfprint.log
+# data/output/dft_gfprint/As_atom/As_gfprint_check2.log
+#----------------------------------------------------------------------
+
+BASIS "ao basis" PRINT
+#BASIS SET: 6-311+G(d,p) for As, extracted from Gaussian 16
+As    S
+ 381200.0000000              0.0008332661
+  57240.0000000              0.0062197710
+  13110.0000000              0.0320298507
+   3743.0000000              0.1272894066
+   1238.0000000              0.3913181758
+    456.3000000              0.5458074556
+As    S
+    456.3000000              0.1809701465
+    181.4000000              0.6218005032
+     77.0700000              0.2498802022
+As    S
+     28.5700000              1.0000000000
+As    S
+     12.3600000              1.0000000000
+As    S
+      4.1170000              1.0000000000
+As    S
+      1.6780000              1.0000000000
+As    S
+      0.2761000              1.0000000000
+As    S
+      0.1105000              1.0000000000
+As    SP
+      0.0260000              1.0000000000              1.0000000000
+As    P
+   2528.0000000              0.0222708982
+    597.3000000              0.1819891681
+    190.7000000              0.8613260628
+As    P
+     70.9600000              0.3433804028
+     28.8900000              0.5059805935
+     12.1300000              0.2612803065
+As    P
+     12.1300000              0.0685361658
+      6.5330000              0.3828209263
+      3.0280000              0.6059914663
+As    P
+      1.3440000              1.0000000000
+As    P
+      0.5823000              1.0000000000
+As    P
+      0.2558000              1.0000000000
+As    P
+      0.0865100              1.0000000000
+As    D
+     86.0500000              0.0279891839
+     24.4900000              0.1650210844
+      8.4420000              0.4373628739
+      2.9810000              0.5725537623
+As    D
+      0.9790000              1.0000000000
+As    D
+      0.2640000              1.0000000000
+END
