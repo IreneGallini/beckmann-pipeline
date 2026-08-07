@@ -15,10 +15,10 @@ The recommended entry point for a new user, wrapping this package's underlying m
 beckmann-nbo init                                    # write .env with your cluster's SSH/Gaussian/NBO7 settings
 beckmann-nbo verify                                   # preflight: SSH reachable? G16_PATH executable? NBO7 wrapper set up?
 beckmann-nbo predict --smiles "O=C1CCC2=C1C=CC=C2" --name test1   # SMILES -> conformers -> AIMNet2 opt -> submit Stage 1+2
-beckmann-nbo predict --continue qtest1 --dir <workdir>/dft_opt    # once Stage 1 finishes, generate + submit Stage 3 (the N-O scan)
-beckmann-nbo status --mol qtest1 --dir <workdir>/dft_opt          # per-stage status + live R/F prediction once Stage 3 is clean
-beckmann-nbo recover --mol 020                        # run one pass of the automated oscillation-recovery ladder
-beckmann-nbo report --mol 020 --out <dir> --advanced   # wCNmax/bond-order/E2PERT plots + classical-vs-wCNmax comparison
+beckmann-nbo --dir <workdir>/dft_opt predict --continue qtest1    # once Stage 1 finishes, generate + submit Stage 3 (the N-O scan)
+beckmann-nbo --mol qtest1 --dir <workdir>/dft_opt status          # per-stage status + live R/F prediction once Stage 3 is clean
+beckmann-nbo --mol 020 recover                        # run one pass of the automated oscillation-recovery ladder
+beckmann-nbo --mol 020 report --out <dir> --advanced   # wCNmax/bond-order/E2PERT plots + classical-vs-wCNmax comparison
 ```
 
 `--dry-run`, `--mol`, and `--dir` are global flags, pass them **before** the subcommand (e.g. `beckmann-nbo --dry-run --mol 002 status`), matching `hpc.py`'s own convention.

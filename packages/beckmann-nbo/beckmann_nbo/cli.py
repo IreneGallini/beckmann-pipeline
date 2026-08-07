@@ -27,10 +27,10 @@ def main() -> None:
             "  beckmann-nbo init\n"
             "  beckmann-nbo verify\n"
             "  beckmann-nbo predict --smiles 'O=C1CCC2=C1C=CC=C2' --name test1\n"
-            "  beckmann-nbo predict --continue qtest1 --dir data/output/query_predictions/qtest1/dft_opt\n"
-            "  beckmann-nbo status --mol qtest1 --dir data/output/query_predictions/qtest1/dft_opt\n"
-            "  beckmann-nbo recover --mol 020\n"
-            "  beckmann-nbo report --mol 020 --out /tmp/report_020 --advanced\n"
+            "  beckmann-nbo --dir data/output/query_predictions/qtest1/dft_opt predict --continue qtest1\n"
+            "  beckmann-nbo --mol qtest1 --dir data/output/query_predictions/qtest1/dft_opt status\n"
+            "  beckmann-nbo --mol 020 recover\n"
+            "  beckmann-nbo --mol 020 report --out /tmp/report_020 --advanced\n"
         ),
     )
     parser.add_argument("--dry-run", action="store_true",

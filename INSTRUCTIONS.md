@@ -1,10 +1,10 @@
 # Handoff: how to use the pipeline
 
 Written at the end of my internship as a practical "how do I actually run this"
-guide, organized by the three ways to use the pipeline: the **web app**, the
-**`beckmann-nbo` CLI**, and the **standalone scripts**. For architecture and
-why things are structured this way, see `CLAUDE.md` (kept up to date, will
-outlive this file).
+guide, organized by the four ways to use the pipeline: the
+**`beckmann-pyscf` CLI**, the **`beckmann-nbo` CLI**, the **web app**, and
+the **standalone scripts**. For architecture and why things are structured
+this way, see `CLAUDE.md` (kept up to date, will outlive this file).
 
 ## 0. One-time setup
 
@@ -19,21 +19,63 @@ This installs all three packages (`beckmann-core`, `beckmann-nbo`,
 If you'll use the Gaussian/NBO7/Citadel path, copy `.env.example` to `.env`
 at the repo root and fill in with SSH key.
 
-## 1. Web app 
+## 1. `beckmann-pyscf` CLI (AIMNet2 + PySCF, no HPC)
+
+This is the primary way to run the open-source, HPC-free pipeline locally
+from your own terminal: no Gaussian, no NBO7, no Citadel. The web app
+(Section 3 below) is a separate, secondary thing: a hosted prototype for
+external collaborators who don't have this repo/environment set up, not
+the way you should run this yourself.
 
 ```bash
-cd packages/beckmann-pyscf/backend
-python app.py
-# open http://localhost:5001
+beckmann-pyscf predict --smiles "O=C1CCC2=C1C=CC=C2" --name test1 --plot
+# [1/4]..[4/4] progress -> ./beckmann_pyscf_runs/test1/{optimized.sdf,wcnmax_series.csv,summary.txt,wcnmax_vs_rno.png}
 ```
 
-This is also callable directly from Python without the web UI, if you just
-want a result in a script or notebook:
+That single command runs the whole pipeline: conformers → AIMNet2
+optimization → PySCF wCNmax scan → R/F prediction, printing progress at
+each stage and writing its results into `./beckmann_pyscf_runs/test1/` by
+default (`--out` to choose a different directory).
+
+**Stage-by-stage, to inspect each step's output on its own** (useful for
+checking whether something looks wrong, a bad conformer, an unresolved
+atom map, before trusting a full `predict` run):
+
+```bash
+beckmann-pyscf conformers --smiles "O=C1CCC2=C1C=CC=C2" --name test1
+# -> prints the conformers SDF path
+
+beckmann-pyscf optimize --conformers-sdf <path from above>
+# -> prints AIMNet2 energy + the resolved oxime atom map (C/N/O/aryl/alkyl indices),
+#    writes best.sdf. This is the checkpoint that catches a bad atom-map resolution
+#    before it silently breaks the scan stage downstream
+
+beckmann-pyscf scan --sdf <path from above> --plot
+# -> runs the 7-point PySCF wCNmax scan, prints the R/F prediction,
+#    writes wcnmax_series.csv/summary.txt/wcnmax_vs_rno.png
+```
+
+Each subcommand takes an explicit input path (copy whatever the previous
+command printed) rather than any implicit state tracking, so any stage can
+also be run standalone against an SDF you already have from somewhere
+else: `optimize` doesn't require its input to have come from `conformers`,
+and `scan` doesn't require its input to have come from `optimize`.
+
+`scan` also takes `--ci`/`--ni`/`--oi`/`--c-aryl`/`--c-alkyl` (1-based atom
+indices) to override auto-detection if `get_oxime_atoms()` picks the wrong
+atom on an unusual substrate; `optimize`'s printed atom map gives you the
+exact values to pass. And `--r-min`/`--r-max`/`--r-step` to adjust the scan
+window/resolution.
+
+**Callable directly from Python too**, if you want a result in a script or
+notebook rather than the CLI:
 
 ```python
 from beckmann_pyscf.pipeline import predict
-result = predict("O=C1CCC2=CC=CC=C21")  # example SMILES
-result["prediction"]
+
+if __name__ == "__main__":
+    result = predict("O=C1CCC2=CC=CC=C21")  # example SMILES
+    print(result["prediction"])
 ```
 
 ## 2. `beckmann-nbo` CLI
@@ -105,10 +147,61 @@ Stage 3 = rigid N–O bond scan: stretching the N–O bond away from the Stage 1
   molecules at once, each row gets its own `data/output/query_predictions/<sanitized-id>/`
   folder, following the same layout as above.
 
-## 3. Standalone scripts 
+## 3. Web app (prototype, for external collaborators)
 
-The CLI above is the recommended path for *new* molecules. The benchmark
-set itself was processed with the underlying scripts directly.
+```bash
+cd packages/beckmann-pyscf/backend
+python app.py
+# open http://localhost:5001
+```
+
+This is a hosted prototype of the same AIMNet2+PySCF pipeline as Section 1,
+meant for external collaborators who don't have this repo or conda
+environment set up locally, not the way to run this yourself. If you have
+the repo cloned, use the `beckmann-pyscf` CLI (Section 1) instead: it's
+faster to invoke, gives per-stage progress and stage-level inspection, and
+doesn't require running a local Flask server.
+
+## 4. Standalone scripts
+
+These are the literal scripts used to build the 34-molecule benchmark set,
+not general-purpose tools written to accept an arbitrary new molecule.
+Before reusing any of them, check the two things below, both of which trip
+people up if skipped.
+
+### "Standalone" doesn't mean self-contained
+
+Every script here still `import`s from `beckmann_core`/`beckmann_nbo`, so
+downloading a single `.py` file on its own will not run: it needs the full
+repo checked out and the `beckmann` conda env active with all three
+packages installed (`conda env create -f environment.yml`, see Section 0).
+Scripts under `research/` additionally need `PYTHONPATH=research` set for
+their own local imports.
+
+### Most of these scripts are hardwired to the benchmark set, not to "whatever `--dir` you point them at"
+
+This is the part that matters most for testing a **new** molecule. Most
+`packages/beckmann-nbo/scripts/*.py` files take **no arguments at all**:
+they call a `main()` that hardcodes both the working directory
+(`DATA_OUTPUT / "dft_opt"`, i.e. `data/output/dft_opt/`) and the set of
+molecule IDs to loop over. A new molecule generated
+outside that directory, under a different ID, is invisible to these
+scripts: they'll just print `-- mol_XXX: no directory, skipping` for
+every benchmark ID and never look at your molecule at all.
+
+**If the molecule isn't one of the 34 benchmark substrates, use the
+`beckmann-nbo` CLI (Section 2) instead of these scripts.** The CLI's
+`predict`/`status`/`report` commands call the same underlying functions
+these scripts call (`prepare_opt`/`prepare_scan_rigid`, `collect_molecule`,
+`find_wcnmax_minimum`, etc.) but with an explicit `--mol`/`--dir` per
+invocation rather than a hardcoded benchmark scope: that's the whole
+reason the CLI exists as a separate layer on top of this package instead
+of duplicating it.
+
+The rest of this section documents what these scripts actually do, useful
+for understanding/debugging the benchmark set itself or for adapting one
+in place (e.g. temporarily editing `ALL_IDS`/`dft_opt_dir` in a copy of a
+script) rather than for running unmodified against a new molecule.
 
 **Stage 0: SMILES/AIMNet2 (no HPC):**
 
@@ -119,6 +212,20 @@ python research/benchmark_pipeline/02_select_and_optimize.py   # AIMNet2 geometr
 ```
 Output lands in `data/output/conformers/` and
 `data/output/aimnet_optimized/`.
+
+Each of these three scripts' `main()` hardcodes
+benchmark paths (`data/input/benchmark.csv`, `data/output/conformers/`,
+etc.), but the actual work happens in a genuinely reusable, molecule-agnostic
+`beckmann_core` function underneath (`generate_conformers()`,
+`select_and_optimize()`) that takes explicit path arguments and knows
+nothing about the benchmark set. For a single new molecule you don't need
+these scripts at all: that's exactly what the web app and the
+`beckmann-nbo predict`/beckmann-pyscf `predict()` calls in Sections 1-2 do
+by calling those same `beckmann_core` functions directly. Reach for these
+scripts only if you're regenerating conformers/geometries for the whole
+benchmark set (or scripting something similar over a CSV of your own,
+calling `generate_conformers()`/`select_and_optimize()` yourself with your
+own paths).
 
 **Stage 1+2: DFT/NBO7 input generation + Citadel submission:**
 

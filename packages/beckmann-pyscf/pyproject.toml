@@ -14,7 +14,11 @@ dependencies = [
     "gunicorn==26.0.0",
     "flask-limiter==4.1.1",
     "flask-cors==6.0.5",
+    "matplotlib",
 ]
+
+[project.scripts]
+beckmann-pyscf = "beckmann_pyscf.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["backend"]

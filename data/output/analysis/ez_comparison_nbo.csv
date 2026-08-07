@@ -15,7 +15,7 @@ mol_007,E,Z,F,pending,0.0,100.0
 mol_009,E,Z,R,pending,56.0,44.0
 mol_010,E,Z,F,pending,0.0,100.0
 mol_011,E,Z,F,R,0.0,100.0
-mol_013,E,Z,R,pending,56.0,44.0
+mol_013,E,Z,R,R,56.0,44.0
 mol_017,E,Z,F,pending,0.0,100.0
 mol_019,E,Z,R,pending,100.0,0.0
 mol_020,E,Z,R,pending,97.0,3.0

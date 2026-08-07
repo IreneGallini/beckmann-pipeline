@@ -92,9 +92,9 @@ def submit_stage_1_2(query_id: str, smi_path: Path, workdir: Path, dry_run: bool
 
     print(
         f"\nSubmitted. Poll with:\n"
-        f"  beckmann-nbo status --mol {query_id} --dir {dft_opt_dir}\n"
+        f"  beckmann-nbo --mol {query_id} --dir {dft_opt_dir} status\n"
         f"Once Stage 1 shows Normal termination, continue to Stage 3 with:\n"
-        f"  beckmann-nbo predict --continue {query_id} --dir {dft_opt_dir}"
+        f"  beckmann-nbo --dir {dft_opt_dir} predict --continue {query_id}"
     )
 
 
@@ -110,7 +110,7 @@ def continue_stage_3(query_id: str, dft_opt_dir: Path, dry_run: bool) -> None:
     if not opt_log.exists() or "Normal termination" not in opt_log.read_text()[-2000:]:
         print(
             f"ERROR: {opt_log} not found or Stage 1 hasn't reached Normal termination yet.\n"
-            f"Check with: beckmann-nbo status --mol {query_id} --dir {dft_opt_dir}",
+            f"Check with: beckmann-nbo --mol {query_id} --dir {dft_opt_dir} status",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -124,7 +124,7 @@ def continue_stage_3(query_id: str, dft_opt_dir: Path, dry_run: bool) -> None:
     cmd_submit_scan(config, dry_run, query_id, dft_opt_dir)
     print(
         f"\nSubmitted. Poll with:\n"
-        f"  beckmann-nbo status --mol {query_id} --dir {dft_opt_dir}"
+        f"  beckmann-nbo --mol {query_id} --dir {dft_opt_dir} status"
     )
 
 
