@@ -127,8 +127,6 @@ PYTHONPATH=research python research/analysis_scripts/plot_single_wcnmax.py mol_0
 
 ## Other documentation
 
-- `CLAUDE.md`: full architecture, every module's purpose, the NBO7-on-Citadel
-  setup trap, output file reference, known issues/limitations.
 - `packages/beckmann-nbo/README.md`, `packages/beckmann-pyscf/README.md`:
   per-package usage details, deployment notes.
 - `research/README.md`: what's in `research/` and how to run it.
