@@ -36,7 +36,7 @@ result = predict("O=C1CCC2=CC=CC=C21")  # example SMILES
 result["prediction"]
 ```
 
-## 2. `beckmann-nbo` CLI 
+## 2. `beckmann-nbo` CLI
 
 It needs Citadel (or any server with Gaussian16 + NBO7).
 
@@ -44,21 +44,66 @@ It needs Citadel (or any server with Gaussian16 + NBO7).
 beckmann-nbo init                                   # writes .env SSH settings
 beckmann-nbo verify                                 # SSH reachable? g16 executable? NBO7 wrapper set up?
 beckmann-nbo predict --smiles "O=C1CCC2=C1C=CC=C2" --name test1   # SMILES -> conformers -> AIMNet2 opt -> submits Stage 1+2 to Citadel
-# wait for Stage 1 to finish on the cluster 
-beckmann-nbo predict --continue test1 --dir <workdir>/dft_opt     # generates + submits Stage 3 (the N-O bond scan)
-beckmann-nbo status --mol test1 --dir <workdir>/dft_opt           # per-stage job status; once Stage 3 is done, a live R/F prediction
-beckmann-nbo report --mol test1 --out <dir> --advanced            # wCNmax/bond-order plots + classical-vs-wCNmax comparison
 ```
 
-Stage 1 = geometry optimization: Gaussian DFT optimization (wB97XD/6-311+G(d,p)) of the AIMNet2-optimized starting geometry, producing {name}_opt.gjf/.log. 
+**Read the directory path `predict` prints before doing anything else.**
+Every command after this one needs a `--dir` pointing at the same job
+folder, and the easiest way to get that right is to copy the path `predict`
+itself prints rather than reconstruct it from memory.
 
-Stage 2 = NBO7 single-point: an NBO7 single-point calculation (pop=nbo7read) run on the Stage 1 converged geometry, producing {name}_nbo.gjf/.log. Result: E2PERT, BNDIDX, NBOSUM, and CMO data at the equilibrium geometry.
+### How the directories actually work
+
+`--name test1` does **not** become the folder name verbatim. It's run
+through an internal sanitizer (`_sanitize_id`) that prefixes a `q` and
+strips underscores, so `--name test1` becomes the id `qtest1`. That id is
+then used consistently everywhere: as the folder name, and as the value
+you pass to `--mol`/`--continue` in every later command. You don't need to
+compute this yourself: just re-use whatever `--name` you originally typed
+(the CLI re-derives the same `qtest1` from it each time), or copy the
+folder name straight out of the printed path.
+
+Without `--workdir`, a fresh `predict --smiles` call creates:
+
+```
+data/output/query_predictions/qtest1/          <- workdir for this molecule
+├── conformers/
+├── aimnet_optimized/
+└── dft_opt/                                    <- the "--dir" every later command needs
+    └── qtest1_E/  (and/or qtest1_Z/)
+        ├── qtest1_E_opt.gjf / .log             <- Stage 1
+        ├── qtest1_E_nbo.gjf / .log              <- Stage 2
+        └── qtest1_E_scan.gjf / .log             <- Stage 3 (after --continue)
+```
+
+After the first `predict` call finishes, it prints exactly this:
+
+```
+Submitted. Poll with:
+  beckmann-nbo status --mol qtest1 --dir data/output/query_predictions/qtest1/dft_opt
+Once Stage 1 shows Normal termination, continue to Stage 3 with:
+  beckmann-nbo predict --continue qtest1 --dir data/output/query_predictions/qtest1/dft_opt
+```
+
+```bash
+# wait for Stage 1 to finish on the cluster, then:
+beckmann-nbo predict --continue qtest1 --dir data/output/query_predictions/qtest1/dft_opt   # generates + submits Stage 3 (the N-O bond scan)
+beckmann-nbo status --mol qtest1 --dir data/output/query_predictions/qtest1/dft_opt          # per-stage job status; once Stage 3 is done, a live R/F prediction
+beckmann-nbo report --mol qtest1 --dir data/output/query_predictions/qtest1/dft_opt --out /tmp/qtest1_report --advanced   # wCNmax/bond-order plots + classical-vs-wCNmax comparison
+```
+
+Note `report`'s `--out` where the generated PNG plots and `classical_vs_wcnmax.txt` get
+written. It defaults to nothing (you must pass it).
+
+Stage 1 = geometry optimization: Gaussian DFT optimization (wB97XD/6-311+G(d,p)) of the AIMNet2-optimized starting geometry, producing {name}_opt.gjf/.log.
+
+Stage 2 = NBO7 single point: an NBO7 single point calculation (pop=nbo7read) run on the Stage 1 converged geometry, producing {name}_nbo.gjf/.log. Result: E2PERT, BNDIDX, NBOSUM, and CMO data at the equilibrium geometry.
 
 Stage 3 = rigid N–O bond scan: stretching the N–O bond away from the Stage 1 equilibrium (rigid displacement → constrained re-optimization → NBO7 single point, at each point), producing {name}_scan.gjf/.log. This generates the wCNmax-vs-R(N–O) series.
 
 - `predict --csv path.csv` (with `id`/`SMILES` columns, same shape as
   `data/input/benchmark.csv`) submits Stage 1+2 for a whole batch of
-  molecules at once.
+  molecules at once, each row gets its own `data/output/query_predictions/<sanitized-id>/`
+  folder, following the same layout as above.
 
 ## 3. Standalone scripts 
 
@@ -130,5 +175,4 @@ PYTHONPATH=research python research/analysis_scripts/plot_single_wcnmax.py mol_0
 - `packages/beckmann-nbo/README.md`, `packages/beckmann-pyscf/README.md`:
   per-package usage details, deployment notes.
 - `research/README.md`: what's in `research/` and how to run it.
-- `research/Notes.md`: debugging/investigation narrative (e.g. why some
-  molecules needed a finer scan step size).
+
