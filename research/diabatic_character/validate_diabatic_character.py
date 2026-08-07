@@ -1,9 +1,8 @@
 """
-Validate beckmann.dft.diabatic_character against Tetiana's reference logs
+Validate beckmann.dft.diabatic_character against external reference logs
 (example_scans/5_s1_Me.log .. 5_s4_Me.log).
 
-Gate 1 (reference case, hardcoded atom numbers -- the only path possible for
-this molecule, which has no .gjf oxime label or best_per_substrate.sdf entry):
+Gate 1 (reference case, hardcoded atom numbers):
 per-point argmax-w_CN / argmax-w_CC MO selection, checked against values
 computed directly from extract_family_weights() (Gate-1-validated against
 Detailed_Orbital_Character_Exchange_Handout.docx Section 6 -- see

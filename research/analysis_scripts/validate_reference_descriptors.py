@@ -1,6 +1,6 @@
 """
 Validate the channel-resolved descriptor code (parse_cmo.py, descriptors.py)
-against an external reference log from Tetiana: 5_s0_Me.log, compound 3 from
+against an external reference log: 5_s0_Me.log, compound 3 from
 "Ring Size and Substituent Effects in the Beckmann Rearrangement" (Table 2),
 the methyl-substituted oxime, R0 equilibrium geometry only.
 
@@ -106,7 +106,7 @@ def main() -> None:
     print("Tier 2 (d/dR slope validation against Table 2): BLOCKED.")
     print("  Only 5_s0_Me.log (R0 equilibrium) exists in the repo for compound 3.")
     print("  Table 2's reported d/dR values need all 5 scan points (R0 through R0+0.4 A).")
-    print("  Not approximating a slope from one point -- ask Tetiana for the other 4 scan-point logs.")
+    print("  Not approximating a slope from one point -- ask for the other 4 scan-point logs.")
 
 
 if __name__ == "__main__":

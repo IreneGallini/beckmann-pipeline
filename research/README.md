@@ -39,7 +39,7 @@ PYTHONPATH=research python research/pyscf_validation/compare_wcnmax.py
   and `beckmann_core.wcnmax_rule`'s own live product functions).
 - `viz.py` -- generic wCNmax(R) plotting helpers used across the scripts
   above.
-- `example_scans/` -- Tetiana's external reference logs (`5_s*_Me.log`)
+- `example_scans/` -- external reference logs (`5_s*_Me.log`)
   used throughout the PySCF validation work.
 - `reference/` -- misc. reference artifacts (`oxime_001_scan.gjf`).
 - `archived_ketone_pipeline/` -- the original (pre-benchmark) ChemDraw-based

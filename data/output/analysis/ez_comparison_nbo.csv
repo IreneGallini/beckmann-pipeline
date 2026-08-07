@@ -1,0 +1,10 @@
+mol_id,lowest_energy_isomer,other_isomer,prediction_lowest_energy,prediction_other_isomer,pct_product_A,pct_product_B
+mol_001,E,Z,R,F,33.0,67.0
+mol_002,E,Z,R,R,0.0,100.0
+mol_003,E,Z,R,F,16.0,84.0
+mol_008,E,Z,R,R,0.0,100.0
+mol_012,E,Z,R,R,0.0,100.0
+mol_014,Z,E,R,F,0.0,100.0
+mol_016,E,Z,R,R,18.0,82.0
+mol_018,E,Z,R,F,0.0,100.0
+mol_015,E,Z,F,R,59.0,41.0

@@ -1,23 +1,14 @@
 """
 Compare the diabatic character-exchange pattern across the full benchmark
-set, colored by experimental R/F outcome. Not part of the regular prediction
-pipeline -- for supervisor discussion, reading
+set, colored by experimental R/F outcome. Reading
 data/output/analysis/character_exchange_benchmark.csv and
 character_exchange_benchmark_summary.csv
-(scripts/analysis/character_exchange_benchmark.py). Deliberately does NOT
-compute or suggest a classification threshold -- these plots exist to make
-the pattern visible, not to decide a cutoff. Reuses beckmann.dft.viz's
-established R/F color convention (OUTCOME_COLOR) rather than introducing new
-colors -- consistent with every other R/F-colored plot in this project.
-
-Separate file from scripts/analysis/plot_character_exchange.py (the
-reference-case script) -- does not import or touch it, or its outputs.
+(scripts/analysis/character_exchange_benchmark.py). 
+These plots exist to make the pattern visible, not to decide a cutoff. 
 
 Produces:
-  data/output/analysis/plots/character_exchange_benchmark_overlay.png -- one
-      line per molecule, f_CN_CC vs delta_R, colored by R/F
-  data/output/analysis/plots/character_exchange_benchmark_delta.png -- one
-      point per molecule, delta on the y-axis, jittered by R/F on the x-axis
+  data/output/analysis/plots/character_exchange_benchmark_overlay.png 
+  data/output/analysis/plots/character_exchange_benchmark_delta.png 
 """
 import csv
 from collections import defaultdict

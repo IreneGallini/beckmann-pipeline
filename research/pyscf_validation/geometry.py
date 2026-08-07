@@ -2,19 +2,10 @@
 Reference geometries and atom maps for the two validation cases, reusing the main
 pipeline's own Gaussian-log geometry parser rather than reimplementing one.
 
-mol_002_E: our own pipeline, wB97XD/6-311+G(d,p), SMD/water -- fully known level of
-    theory. Geometry is the DFT-converged one from Stage 1 (mol_002_E_opt.log's final
+mol_002_E: our own pipeline, wB97XD/6-311+G(d,p), SMD/water. Geometry is the DFT-converged one from Stage 1 (mol_002_E_opt.log's final
     "Standard orientation"), the same geometry Stage 2/3's NBO7 analysis ran on.
-5_s0_Me: Tetiana's external reference log (compound 3, "Ring Size and Substituent
-    Effects in the Beckmann Rearrangement", Table 2). Its own route line
-    (wb97xd/genecp scrf=(smd,solvent=water)) uses a custom hand-specified ECP basis
-    applied to every C/N/O center (4 valence electrons per carbon, minimal
-    split-valence primitives) -- NOT our all-electron 6-311+G(d,p). Reproducing that
-    exact basis means transcribing every exponent/coefficient/ECP parameter from the
-    log by hand; not attempted here. We run this case at OUR basis (6-311+G(d,p))
-    instead, so any comparison against the paper's reported numbers is a
-    different-basis check, not an apples-to-apples validation -- see
-    Notes_pyscf_alt.md.
+5_s0_Me: an external reference log (compound 3, "Ring Size and Substituent
+    Effects in the Beckmann Rearrangement", Table 2). 
 """
 from pathlib import Path
 
@@ -34,12 +25,11 @@ REFERENCE_LOG   = ROOT / "5_s0_Me.log"
 
 def _parse_orientation_blocks(lines: list[str], header: str) -> list[tuple[int, list]]:
     """Same block-parsing loop as beckmann.dft.scan.parse_standard_orientations, just
-    parameterized on the header string -- needed because 5_s0_Me.log's route line uses
+    parameterized on the header string needed because 5_s0_Me.log's route line uses
     `nosymm`, which makes Gaussian print 'Input orientation:' instead of 'Standard
     orientation:'. Our own pipeline's .gjf files never use nosymm, so
     parse_standard_orientations (hardcoded to 'Standard orientation:') is correct and
-    unmodified for every log the main pipeline produces -- this is a local fallback for
-    this one external reference file's quirk, not a replacement for it."""
+    unmodified for every log the main pipeline produces."""
     blocks = []
     i = 0
     while i < len(lines):
@@ -83,7 +73,7 @@ def pyscf_atom_spec(atoms: list[tuple]) -> list[list]:
     return [[sym, (x, y, z)] for sym, x, y, z in atoms]
 
 
-# (charge, multiplicity) -- both cases are the protonated activated oxime, singlet.
+# (charge, multiplicity) both cases are the protonated activated oxime, singlet.
 CHARGE = 1
 MULTIPLICITY = 1
 SPIN = MULTIPLICITY - 1  # PySCF wants 2S, not 2S+1
@@ -96,7 +86,7 @@ REFERENCE_CASES = {
     },
     "5_s0_Me": {
         "log": REFERENCE_LOG,
-        # Hardcoded from the paper's own Figure 2 / compound-3 convention -- same
+        # Hardcoded from the paper's own Figure 2 / compound-3 convention same
         # atom map validate_reference_descriptors.py uses for the NBO7 check.
         "ci": 7, "ni": 17, "oi": 18, "c_aryl": 1, "c_alkyl": 8,
         "basis_note": (
@@ -127,10 +117,8 @@ def load_test_set_case(mol_id: str) -> dict:
     """Same shape as load_case(), but for any of the six main-pipeline test-set
     molecules (mol_002/006/014/020/021/029) instead of the two hand-picked reference
     cases above. Atom map (ci/ni) and geometry are both resolved fresh via the main
-    pipeline's own utilities -- resolve_mol_name (beckmann.dft.inputs) and
-    oxime_atom_map_from_gjf (beckmann.dft.scan) -- not hardcoded per molecule the way
-    REFERENCE_CASES is, since that would mean re-transcribing six atom maps by hand
-    with the usual risk of a transcription error.
+    pipeline's own utilities resolve_mol_name (beckmann.dft.inputs) and
+    oxime_atom_map_from_gjf (beckmann.dft.scan).
     """
     if mol_id not in TEST_IDS:
         raise ValueError(f"{mol_id}: not in TEST_IDS ({sorted(TEST_IDS)})")
@@ -159,7 +147,7 @@ def load_test_set_case(mol_id: str) -> dict:
 
 
 def atoms_before(lines: list[str], idx: int) -> list[tuple]:
-    """Atoms from the last 'Standard orientation' block before line idx --
+    """Atoms from the last 'Standard orientation' block before line idx
     the same anchor beckmann.dft.parse_nbo.r_no_before uses to tag a CMO/
     E2PERT table with its R(N-O), but returning the full geometry instead of
     just the N-O distance."""
@@ -174,7 +162,7 @@ def _stage_points_from_log(log_path: Path, ni: int, oi: int) -> dict[float, list
     """{r_no: atoms} for every CMO section in one stage log, keyed by the
     N-O distance of the geometry it was computed on. Last table at a given R
     wins (Stable=Opt prints a pre-optimization seed pass and a separate
-    post-optimization pass at the same frozen scan-point R -- see
+    post-optimization pass at the same frozen scan-point R see
     beckmann.dft.parse_cmo.parse_log, which applies the identical rule to
     the NBO data itself)."""
     lines = log_path.read_text().splitlines()
@@ -210,9 +198,7 @@ def _mol_stage_points(mol: str, mol_dir: Path, ni: int, oi: int) -> dict[str, li
 def _mol_stage_points_stepscan(mol: str, mol_dir: Path, ni: int, oi: int) -> dict[str, list]:
     """Same role as _mol_stage_points, but merges scan geometries from one or
     more dft_opt_stepscan/ reruns (STEP_SCAN_SOURCES) instead of the
-    canonical, crashed _scan.log -- mirrors
-    beckmann.dft.parse_cmo.collect_molecule_stepscan, applied to geometries
-    instead of NBO data, so R(N-O) point identity matches the trusted series."""
+    canonical, crashed _scan.log."""
     points: dict[str, list] = {}
     nbo_log = mol_dir / f"{mol}_nbo.log"
     if nbo_log.exists():
@@ -220,9 +206,6 @@ def _mol_stage_points_stepscan(mol: str, mol_dir: Path, ni: int, oi: int) -> dic
         if by_r:
             (atoms,) = by_r.values()  # exactly one CMO table in _nbo.log
             points["nbo"] = atoms
-    # else: no equilibrium NBO for this molecule at all (e.g. mol_003_E,
-    # whose Stage 2 NBO job never ran/completed) -- matches
-    # beckmann.dft.parse_cmo.collect_stage's own "missing file" handling
     # (empty rows, not a hard failure), so the series is scan-only.
 
     all_by_r: dict[float, list] = {}
@@ -238,10 +221,10 @@ def _mol_stage_points_stepscan(mol: str, mol_dir: Path, ni: int, oi: int) -> dic
 
 def load_test_set_scan_series(mol_id: str) -> list[dict]:
     """One 'case' dict (same shape as load_case()/load_test_set_case(), plus
-    'stage'/'r_no') per available R(N-O) point -- 'nbo' followed by every
-    'scan_N' -- for any main-pipeline benchmark molecule with completed DFT
+    'stage'/'r_no') per available R(N-O) point 'nbo' followed by every
+    'scan_N' for any main-pipeline benchmark molecule with completed DFT
     logs under data/output/dft_opt/ (ALL_IDS, not just the original 6
-    TEST_IDS -- every benchmark substrate has completed Stage 1-3 logs on
+    TEST_IDS every benchmark substrate has completed Stage 1-3 logs on
     disk, see Notes_pyscf_alt.md). Lets the PySCF method be run
     across a full scan instead of just the equilibrium geometry, using the
     same geometry-anchor convention and STEP_SCAN_SOURCES merging the main

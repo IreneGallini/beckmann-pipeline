@@ -2,7 +2,7 @@
 Diabatic character-exchange tracking -- the production method for the
 CN/C-C acceptor-character question, replacing an earlier continuity-tracked
 "avoided crossing" approach that lived in beckmann.dft.branch_tracking
-(deleted; see below for why). Per Tetiana's direct framing: acceptor
+(deleted; see below for why). Per the PI's direct framing: acceptor
 character starts N-side/C=N-dominant, becomes mixed, and ends C-C-routed
 (migrating-bond-dominant) as R(N-O) increases. This is a diabatic,
 per-point-independent quantity -- no branch continuity, no energy filtering.
@@ -12,7 +12,7 @@ predictive descriptor.
 
 Why the old branch_tracking.py approach was retired: it tracked MO identity
 across geometries via a signed-dot-product similarity metric, restricted to
-candidates with positive canonical energy. Tetiana rejected that restriction
+candidates with positive canonical energy. The PI rejected that restriction
 directly -- negative CMO eigenvalues are normal for low-lying virtuals in a
 cationic system like this project's protonated oximes and don't imply
 occupied/bonding character. Concrete evidence (from the reference case,
@@ -35,18 +35,18 @@ math (w_CC/w_CN/f_CC/f_CN), already Gate-1-validated against
 Detailed_Orbital_Character_Exchange_Handout.docx Section 6 -- moved here
 verbatim rather than re-derived.
 
-Atom numbering: c1_atom/cn_c_atom/cn_n_atom/ref_atom default to Tetiana's own
-reference-molecule numbering (1/7/17/8). To run on a real benchmark substrate
+Atom numbering: c1_atom/cn_c_atom/cn_n_atom/ref_atom default to the reference
+molecule's own numbering (1/7/17/8). To run on a real benchmark substrate
 instead, pass mol/mol_dir and the real per-molecule atom numbers are resolved
 via beckmann_nbo.descriptors.get_substituent_map(), which returns
 {ci, ni, oi, c_aryl, c_alkyl}. The mapping from that dict onto this module's
 parameter names follows beckmann_nbo.parse_cmo's own channel definitions
 (w17max = BD*(C{ci}-C{c_aryl}), w78max = BD*(C{ci}-C{c_alkyl})):
 
-    c1_atom    (Tetiana's C1)  <-> c_aryl
-    cn_c_atom  (Tetiana's C7)  <-> ci
-    cn_n_atom  (Tetiana's N17) <-> ni
-    ref_atom   (Tetiana's C8)  <-> c_alkyl
+    c1_atom    (reference molecule's C1)  <-> c_aryl
+    cn_c_atom  (reference molecule's C7)  <-> ci
+    cn_n_atom  (reference molecule's N17) <-> ni
+    ref_atom   (reference molecule's C8)  <-> c_alkyl
 
 The reference case itself (example_scans/5_s*_Me.log) has no corresponding
 .gjf oxime label or best_per_substrate.sdf entry, so it cannot be resolved

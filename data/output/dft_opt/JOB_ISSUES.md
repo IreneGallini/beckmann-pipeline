@@ -175,7 +175,7 @@ before assuming it's an unrelated optimizer issue.
 
 ---
 
-## 2026-07-16/18 — mol_020_E, mol_003_E, mol_016_E, mol_023_E, mol_030_E, mol_032_E — non-convergence crashes under the new 6-point/0.05 Å architecture — fix attempted, REVERTED pending supervisor input
+## 2026-07-16/18 — mol_020_E, mol_003_E, mol_016_E, mol_023_E, mol_030_E, mol_032_E — non-convergence crashes under the new 6-point/0.05 Å architecture — fix attempted, REVERTED pending PI input
 
 **STATUS: OPEN.** A partial fix (CalcFC restart of only the crashed point,
 spliced back into the other 5 unmodified points) was attempted for
@@ -185,7 +185,7 @@ unresolved state (mol_023_E and mol_030_E crashed after the revert
 decision, so neither was patched at all — straight to "leave it and
 document it"). Do not re-attempt a per-point CalcFC patch without
 re-reading this entry; the methodology question below needs an answer
-first (from the supervisor), not another one-off fix.
+first (from the PI), not another one-off fix.
 
 Six crashes out of the 34 benchmark substrates processed so far (all 34
 now have at least Stage 1 attempted; all 34 have reached the Stage 3 scan)
@@ -256,7 +256,7 @@ mol_003_E's point 6 — but this leaves 5 of that molecule's 6 scan points
 computed under one setting and 1 point under another, within the same
 R(N-O) series that downstream descriptors (Ψ, Λ, wCNmax) treat as a single
 continuous trend. That's a methodological inconsistency, not just a
-technical fix — flagged directly by the user, who wants the supervisor's
+technical fix — flagged directly by the user, who wants the PI's
 opinion on the right general policy (e.g., "if any point in a molecule's
 scan needs CalcFC, rerun all 6 points of that molecule with it" vs. some
 other rule) before any more crashed points get patched one at a time.
@@ -268,11 +268,11 @@ Partial/abandoned resume files kept in
 `data/output/dft_opt/_archive_pre_6pt_scan/{mol}_crashed_attempt/` for
 reference, not deleted.
 
-**Open question for the supervisor:** what's the standard/expected way to
+**Open question for the PI:** what's the standard/expected way to
 handle a non-converging point within a relaxed scan — rerun the whole
 series with stronger optimizer settings uniformly, rerun just the failed
 point with different settings (accepting the inconsistency), freeze the
-specific oscillating internal coordinate, or something else? Send her the
+specific oscillating internal coordinate, or something else? Send the PI the
 five crashed logs above (mol_020_E, mol_003_E, mol_023_E, mol_030_E,
 mol_032_E — mol_016_E's is unfortunately unrecoverable, see its entry
 above).
@@ -285,7 +285,7 @@ substrates with similar non-aromatic fused rings (6 for 34 so far, roughly
 the mol_032_E/mol_033_E comparison above). **Do
 not apply the CalcFC-restart-one-point fix anymore** — that's the
 methodology this whole entry exists to flag as inconsistent. Until the
-supervisor responds, the correct action on a new crash is: diagnose (confirm
+the PI responds, the correct action on a new crash is: diagnose (confirm
 it's the same oscillation signature, not something new), archive the
 crashed log to `_archive_pre_6pt_scan/{mol}_crashed_attempt/`, add a
 one-paragraph entry here, and leave the molecule crashed. Do not
@@ -297,8 +297,8 @@ Despite the "do not patch" note above, a test was run anyway (commit
 `opt=(ModRedundant,CalcFC,MaxCycles=300)` uniformly across **all** scan
 points of a molecule (not just the failing one, to avoid mixing optimizer
 settings within a single R(N-O) series) for the five molecules above. This
-was explicitly framed as a test pending the supervisor's answer, not a
-policy change — logging results here for when she responds:
+was explicitly framed as a test pending the PI's answer, not a
+policy change — logging results here for when they respond:
 
 | Molecule | Original crash point | With uniform CalcFC |
 |---|---|---|
@@ -310,7 +310,7 @@ policy change — logging results here for when she responds:
 
 So the fix is substrate-dependent: it fully resolves the oscillation for 3
 of 5, and for the other 2 it shifts which point fails without eliminating
-the failure. This is useful data for the supervisor's methodology question
+the failure. This is useful data for the PI's methodology question
 but is not evidence that uniform CalcFC is a general solution.
 
 **mol_034_E — a 7th substrate with the same crash signature, found
@@ -327,8 +327,8 @@ generated yet — this one doesn't touch the methodology question since it's
 the molecule's first-ever scan attempt at default settings, same as every
 other substrate's initial try.
 
-**Supervisor response (2026-07-20) — step-size shift, not stronger optimizer
-settings.** Rather than CalcFC/NoGDIIS/MaxStep, she suggested trying
+**PI response (2026-07-20) — step-size shift, not stronger optimizer
+settings.** Rather than CalcFC/NoGDIIS/MaxStep, they suggested trying
 different scan step increments for the molecules still failing at pt5 —
 "another increments, say 0.7 or 0.4" (read as 0.07/0.04 Å, consistent with
 our 0.05 Å scale) — the idea being to sample R(N-O) points that land off the

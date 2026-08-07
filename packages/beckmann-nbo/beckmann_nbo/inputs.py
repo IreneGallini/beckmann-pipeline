@@ -179,7 +179,7 @@ def _scan_gjf_rigid(
     via displace_leaving_group), then a constrained optimization
     (opt=ModRedundant, bond frozen at the new length, everything else
     relaxes), then a same-checkpoint Link1 continuation into a full
-    NBO7/CMO single point. Matches the supervisor's reference file
+    NBO7/CMO single point. Matches the PI's reference file
     (oxime_001_scan.gjf) -- see JOB_ISSUES.md for the full rationale.
 
     Defaults (step=0.05, n_points=6) give the standard 7-point series

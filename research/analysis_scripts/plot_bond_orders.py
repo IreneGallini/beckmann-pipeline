@@ -3,7 +3,7 @@ Plot Wiberg bond index (NAO basis) for the two migrating C-C bonds --
 central-C to aryl-C (rearrangement channel) and central-C to alkyl-C
 (fragmentation channel) -- across the N-O scan, for every substrate with
 bond-order data available. Not part of the regular prediction pipeline --
-for supervisor discussion, alongside the existing wCNmax/Lambda/Psi plots
+for PI discussion, alongside the existing wCNmax/Lambda/Psi plots
 (scripts/analysis/summarize_descriptors.py).
 
 Produces:

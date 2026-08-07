@@ -1,7 +1,7 @@
 """
 Summarize and plot the channel-resolved descriptors (Psi, Lambda, wCNmax,
 w17max, w78max) across the N-O scan for the benchmark set, for discussion
-with a supervisor -- not part of the regular prediction pipeline.
+with a PI -- not part of the regular prediction pipeline.
 
 Produces:
   data/output/analysis/plots/{descriptor}.png  -- one plot per descriptor,

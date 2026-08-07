@@ -1,16 +1,9 @@
 """
 Build the diabatic character-exchange dataset across the full benchmark set
-(beckmann.dft.diabatic_character.build_benchmark_character_exchange()). Not
-part of the regular prediction pipeline -- for supervisor discussion,
-extending the reference-case result (scripts/analysis/plot_character_exchange.py)
-to real substrates. No classification threshold is computed here; that's
-deliberately deferred.
-
+(beckmann.dft.diabatic_character.build_benchmark_character_exchange()).
 Produces:
-  data/output/analysis/character_exchange_benchmark.csv         -- one row
-      per (molecule, scan point)
-  data/output/analysis/character_exchange_benchmark_summary.csv -- one row
-      per molecule
+  data/output/analysis/character_exchange_benchmark.csv     
+  data/output/analysis/character_exchange_benchmark_summary.csv 
 """
 import csv
 

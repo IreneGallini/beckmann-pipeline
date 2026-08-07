@@ -1,19 +1,11 @@
 """
 Plot the diabatic character-exchange pattern (beckmann.dft.diabatic_character)
-on Tetiana's 4-point reference scan (example_scans/5_s1_Me.log .. 5_s4_Me.log).
-Not part of the regular prediction pipeline -- a supervisor-facing figure
-showing (a) the character-exchange headline result and (b) the concrete
-evidence for why branch_tracking.py's E>0 candidate filter was rejected: the
-true max-w_CN acceptor MO goes negative-energy at 3 of the 4 scan points.
+on an external 4-point reference scan (example_scans/5_s1_Me.log .. 5_s4_Me.log).
 
 Produces:
-  data/output/analysis/character_exchange_reference.csv -- one row per scan
-      point: R(N-O), the max-w_CN and max-w_CC carrier MOs, their canonical
-      energies, and their f_CN/f_CC fractions.
-  data/output/analysis/plots/character_exchange_reference.png -- two panels
-      sharing the R(N-O) x-axis:
-        top:    f_CN of the max-w_CC-carrier MO -- the character-exchange
-                curve itself (N-side/mixed -> C-C-routed)
+  data/output/analysis/character_exchange_reference.csv 
+  data/output/analysis/plots/character_exchange_reference.png
+        top:    f_CN of the max-w_CC-carrier MO 
         bottom: canonical MO energies of both carriers, with a zero-energy
                 reference line, showing the max-w_CN carrier crossing
                 negative at s2-s4
@@ -31,13 +23,11 @@ EXAMPLE_DIR = Path(__file__).resolve().parents[2] / "example_scans"
 ANALYSIS_DIR = DATA_OUTPUT / "analysis"
 PLOTS_DIR = ANALYSIS_DIR / "plots"
 
-# R(N-O) per reference scan point -- Detailed_Orbital_Character_Exchange_
-# Handout.docx Section 5 (same values validate_branch_tracking.py's
-# GATE2_TARGETS uses).
+# R(N-O) per reference scan point - Detailed_Orbital_Character_Exchange_
 POINTS = [("s1", 1.55), ("s2", 1.70), ("s3", 1.75), ("s4", 1.80)]
 
-COLOR_CN = "#2a78d6"   # categorical slot 1 (blue) -- max-w_CN carrier
-COLOR_CC = "#eb6834"   # categorical slot 2 (orange) -- max-w_CC carrier
+COLOR_CN = "#2a78d6"   # categorical slot 1 (blue) max-w_CN carrier
+COLOR_CC = "#eb6834"   # categorical slot 2 (orange) max-w_CC carrier
 COLOR_MUTED = "#898781"
 COLOR_INK = "#0b0b0b"
 
@@ -73,7 +63,7 @@ def plot(rows: list[dict]) -> Path:
         2, 1, figsize=(7, 6.5), sharex=True, height_ratios=[1, 1.2],
     )
 
-    # -- top panel: the character-exchange curve --
+    # top panel: the character-exchange curve 
     f_cn_cc = [row["f_CN_CC"] for row in rows]
     ax_top.plot(r_values, f_cn_cc, marker="o", markersize=7, linewidth=2, color=COLOR_CN)
     for r, row in zip(r_values, rows):
@@ -87,7 +77,7 @@ def plot(rows: list[dict]) -> Path:
     ax_top.grid(True, color="#e1e0d9")
     ax_top.set_axisbelow(True)
 
-    # -- bottom panel: carrier energies, showing the E>0 filter would fail --
+    # bottom panel: carrier energies, showing the E>0 filter would fail
     e_cn = [row["E_CN_hartree"] for row in rows]
     e_cc = [row["E_CC_hartree"] for row in rows]
     ax_bot.axhline(0, color=COLOR_MUTED, linewidth=1, linestyle="--")
