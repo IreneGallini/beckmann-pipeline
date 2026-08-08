@@ -32,6 +32,7 @@ def main() -> None:
         epilog=(
             "examples:\n"
             "  beckmann-pyscf predict --smiles 'O=C1CCC2=C1C=CC=C2' --name test1 --plot\n"
+            "  beckmann-pyscf predict --csv molecules.csv --plot\n"
             "  beckmann-pyscf conformers --smiles 'O=C1CCC2=C1C=CC=C2' --name test1\n"
             "  beckmann-pyscf optimize --conformers-sdf beckmann_pyscf_runs/test1/conformers/test1_out.sdf\n"
             "  beckmann-pyscf scan --sdf beckmann_pyscf_runs/test1_out/optimized/best.sdf --plot\n"
@@ -41,10 +42,11 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
     sub.required = True
 
-    p_predict = sub.add_parser("predict", help="SMILES -> conformers -> AIMNet2 opt -> PySCF wCNmax scan -> R/F prediction")
-    p_predict.add_argument("--smiles", required=True, help="A single ketone SMILES string")
-    p_predict.add_argument("--name", default="query", help="Short id for this molecule (default: 'query')")
-    p_predict.add_argument("--out", help="Output directory (default: ./beckmann_pyscf_runs/<name>/)")
+    p_predict = sub.add_parser("predict", help="SMILES (or --csv) -> conformers -> AIMNet2 opt -> PySCF wCNmax scan -> R/F prediction")
+    p_predict.add_argument("--smiles", help="A single ketone SMILES string")
+    p_predict.add_argument("--name", default="query", help="Short id for --smiles (default: 'query')")
+    p_predict.add_argument("--csv", help="CSV with 'id'/'SMILES' columns (same shape as data/input/benchmark.csv) for a whole batch")
+    p_predict.add_argument("--out", help="Output directory (default: ./beckmann_pyscf_runs/<name>/, or ./beckmann_pyscf_runs/<id>/ per --csv row)")
     p_predict.add_argument("--plot", action="store_true", help="Also write wcnmax_vs_rno.png")
     p_predict.set_defaults(func=cmd_predict)
 

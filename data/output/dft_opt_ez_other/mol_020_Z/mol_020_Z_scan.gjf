@@ -1,5 +1,5 @@
 %chk=mol_020_Z_scan_pt1.chk
-%nprocshared=8
+%nprocshared=6
 %mem=16GB
 #p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
@@ -38,7 +38,7 @@ B 12 13 F
 
 --Link1--
 %chk=mol_020_Z_scan_pt1.chk
-%nprocshared=8
+%nprocshared=6
 %mem=16GB
 #p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
 
@@ -50,7 +50,7 @@ $NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
 
 --Link1--
 %chk=mol_020_Z_scan_pt2.chk
-%nprocshared=8
+%nprocshared=6
 %mem=16GB
 #p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
@@ -89,7 +89,7 @@ B 12 13 F
 
 --Link1--
 %chk=mol_020_Z_scan_pt2.chk
-%nprocshared=8
+%nprocshared=6
 %mem=16GB
 #p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
 
@@ -101,7 +101,7 @@ $NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
 
 --Link1--
 %chk=mol_020_Z_scan_pt3.chk
-%nprocshared=8
+%nprocshared=6
 %mem=16GB
 #p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
@@ -140,7 +140,7 @@ B 12 13 F
 
 --Link1--
 %chk=mol_020_Z_scan_pt3.chk
-%nprocshared=8
+%nprocshared=6
 %mem=16GB
 #p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
 
@@ -152,7 +152,7 @@ $NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
 
 --Link1--
 %chk=mol_020_Z_scan_pt4.chk
-%nprocshared=8
+%nprocshared=6
 %mem=16GB
 #p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
@@ -191,7 +191,7 @@ B 12 13 F
 
 --Link1--
 %chk=mol_020_Z_scan_pt4.chk
-%nprocshared=8
+%nprocshared=6
 %mem=16GB
 #p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
 
@@ -203,7 +203,7 @@ $NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
 
 --Link1--
 %chk=mol_020_Z_scan_pt5.chk
-%nprocshared=8
+%nprocshared=6
 %mem=16GB
 #p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
@@ -242,7 +242,7 @@ B 12 13 F
 
 --Link1--
 %chk=mol_020_Z_scan_pt5.chk
-%nprocshared=8
+%nprocshared=6
 %mem=16GB
 #p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
 
@@ -254,7 +254,7 @@ $NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
 
 --Link1--
 %chk=mol_020_Z_scan_pt6.chk
-%nprocshared=8
+%nprocshared=6
 %mem=16GB
 #p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
@@ -293,7 +293,7 @@ B 12 13 F
 
 --Link1--
 %chk=mol_020_Z_scan_pt6.chk
-%nprocshared=8
+%nprocshared=6
 %mem=16GB
 #p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
 

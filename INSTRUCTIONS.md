@@ -1,10 +1,10 @@
 # Handoff: how to use the pipeline
 
-Written at the end of my internship as a practical "how do I actually run this"
-guide, organized by the four ways to use the pipeline: the
-**`beckmann-pyscf` CLI**, the **`beckmann-nbo` CLI**, the **web app**, and
-the **standalone scripts**. For architecture and why things are structured
-this way, see `CLAUDE.md` (kept up to date, will outlive this file).
+four ways to use the pipeline:
+- **`beckmann-pyscf` CLI**
+- **`beckmann-nbo` CLI**
+- **web app**
+- **standalone scripts**. 
 
 ## 0. One-time setup
 
@@ -21,12 +21,6 @@ at the repo root and fill in with SSH key.
 
 ## 1. `beckmann-pyscf` CLI (AIMNet2 + PySCF, no HPC)
 
-This is the primary way to run the open-source, HPC-free pipeline locally
-from your own terminal: no Gaussian, no NBO7, no Citadel. The web app
-(Section 3 below) is a separate, secondary thing: a hosted prototype for
-external collaborators who don't have this repo/environment set up, not
-the way you should run this yourself.
-
 ```bash
 beckmann-pyscf predict --smiles "O=C1CCC2=C1C=CC=C2" --name test1 --plot
 # [1/4]..[4/4] progress -> ./beckmann_pyscf_runs/test1/{optimized.sdf,wcnmax_series.csv,summary.txt,wcnmax_vs_rno.png}
@@ -37,9 +31,17 @@ optimization → PySCF wCNmax scan → R/F prediction, printing progress at
 each stage and writing its results into `./beckmann_pyscf_runs/test1/` by
 default (`--out` to choose a different directory).
 
+**Batch mode, a whole CSV of molecules at once:**
+
+```bash
+beckmann-pyscf predict --csv molecules.csv --plot
+```
+
+`molecules.csv` needs `id`/`SMILES` columns, the same shape as
+`data/input/benchmark.csv` 
+
 **Stage-by-stage, to inspect each step's output on its own** (useful for
-checking whether something looks wrong, a bad conformer, an unresolved
-atom map, before trusting a full `predict` run):
+checking whether something looks wrong before trusting a full `predict` run):
 
 ```bash
 beckmann-pyscf conformers --smiles "O=C1CCC2=C1C=CC=C2" --name test1

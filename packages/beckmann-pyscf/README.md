@@ -6,18 +6,21 @@ Depends on `beckmann-core` (pinned version) for the shared oxime/conformer/AIMNe
 
 ## `beckmann-pyscf` CLI
 
-The recommended way to run this locally, once installed (`pip install -e .`, which registers the `beckmann-pyscf` command). The Flask web app documented further below stays available separately as a hosted prototype for external collaborators without a local Python environment — if you have this repo cloned, use the CLI.
+The recommended way to run this locally, once installed (`pip install -e .`, which registers the `beckmann-pyscf` command). The Flask web app documented further below stays available separately as a hosted prototype for external collaborators without a local Python environment: if you have this repo cloned, use the CLI.
 
 ```bash
 beckmann-pyscf predict --smiles "O=C1CCC2=C1C=CC=C2" --name test1 --plot
 # [1/4]..[4/4] progress -> ./beckmann_pyscf_runs/test1/{optimized.sdf,wcnmax_series.csv,summary.txt,wcnmax_vs_rno.png}
+
+beckmann-pyscf predict --csv molecules.csv --plot   # 'id'/'SMILES' columns, same shape as data/input/benchmark.csv;
+                                                     # one bad row is skipped (printed to stderr), doesn't abort the batch
 
 beckmann-pyscf conformers --smiles "O=C1CCC2=C1C=CC=C2" --name test1   # SMILES -> Auto3D conformers only
 beckmann-pyscf optimize --conformers-sdf <path from above>              # conformers SDF -> AIMNet2-optimized geometry only
 beckmann-pyscf scan --sdf <path from above> --plot                      # optimized SDF -> PySCF wCNmax scan + prediction only
 ```
 
-`predict` runs the full pipeline in one call. `conformers`/`optimize`/`scan` run one stage at a time, each printing its own result (energy, resolved oxime atom map, etc.) so a stage's output can be inspected before trusting a full `predict` run — useful for catching a bad atom-map resolution or an unexpected conformer before it silently propagates downstream. Every subcommand takes an explicit input path from the previous stage's printed output (no implicit state tracking), and defaults its own `--out` to `./beckmann_pyscf_runs/<name>/...` when not given. `scan` also accepts `--ci`/`--ni`/`--oi`/`--c-aryl`/`--c-alkyl` to override the auto-detected atom map, and `--r-min`/`--r-max`/`--r-step` to adjust the scan window/resolution.
+`predict` runs the full pipeline in one call (or, with `--csv`, once per row). `conformers`/`optimize`/`scan` run one stage at a time, each printing its own result (energy, resolved oxime atom map, etc.) so a stage's output can be inspected before trusting a full `predict` run: useful for catching a bad atom-map resolution or an unexpected conformer before it silently propagates downstream. Every subcommand takes an explicit input path from the previous stage's printed output (no implicit state tracking), and defaults its own `--out` to `./beckmann_pyscf_runs/<name>/...` when not given (per `--csv` row, `<name>` is that row's `id`). `scan` also accepts `--ci`/`--ni`/`--oi`/`--c-aryl`/`--c-alkyl` to override the auto-detected atom map, and `--r-min`/`--r-max`/`--r-step` to adjust the scan window/resolution.
 
 Full walkthrough with worked examples: the monorepo root `INSTRUCTIONS.md`.
 

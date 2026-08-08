@@ -34,11 +34,24 @@ class TestArgparseSmoke:
         assert args.name == "foo"
         assert args.plot is True
 
-    def test_predict_missing_smiles_exits_2(self, monkeypatch):
+    def test_predict_neither_smiles_nor_csv_exits_1(self, monkeypatch, capsys):
+        """--smiles is no longer required at the argparse level (--csv is a
+        valid alternative), so this is now cmd_predict's own validation
+        (exit 1), not argparse's (exit 2)."""
         monkeypatch.setattr(sys, "argv", ["beckmann-pyscf", "predict"])
         with pytest.raises(SystemExit) as exc_info:
             cli.main()
-        assert exc_info.value.code == 2
+        assert exc_info.value.code == 1
+        assert "ERROR" in capsys.readouterr().err
+
+    def test_predict_parses_csv_flag(self, monkeypatch):
+        captured = {}
+        monkeypatch.setattr(sys, "argv", ["beckmann-pyscf", "predict", "--csv", "molecules.csv", "--plot"])
+        monkeypatch.setattr("beckmann_pyscf.cli.cmd_predict", lambda args: captured.setdefault("args", args))
+        cli.main()
+        args = captured["args"]
+        assert args.csv == "molecules.csv"
+        assert args.smiles is None
 
     def test_scan_missing_sdf_exits_2(self, monkeypatch):
         monkeypatch.setattr(sys, "argv", ["beckmann-pyscf", "scan"])
@@ -74,7 +87,7 @@ class TestValidateSmilesShortCircuit:
             raise AssertionError("run_conformers should never be called for a bad SMILES")
 
         monkeypatch.setattr(cli_predict, "run_conformers", boom)
-        args = _fake_args(smiles="not a smiles", name="q", out=None, plot=False)
+        args = _fake_args(smiles="not a smiles", name="q", csv=None, out=None, plot=False)
         with pytest.raises(SystemExit) as exc_info:
             cli_predict.cmd_predict(args)
         assert exc_info.value.code == 1
@@ -92,6 +105,43 @@ class TestValidateSmilesShortCircuit:
             cli_conformers.cmd_conformers(args)
         assert exc_info.value.code == 1
         assert "ERROR" in capsys.readouterr().err
+
+
+class TestCsvBatch:
+    def test_missing_csv_file_exits_1(self, monkeypatch, capsys, tmp_path):
+        from beckmann_pyscf import cli_predict
+
+        args = _fake_args(smiles=None, name="query", csv=str(tmp_path / "nope.csv"), out=None, plot=False)
+        with pytest.raises(SystemExit) as exc_info:
+            cli_predict.cmd_predict(args)
+        assert exc_info.value.code == 1
+        assert "ERROR" in capsys.readouterr().err
+
+    def test_csv_missing_columns_exits_1(self, monkeypatch, capsys, tmp_path):
+        from beckmann_pyscf import cli_predict
+
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_text("foo,bar\n1,2\n")
+        args = _fake_args(smiles=None, name="query", csv=str(csv_path), out=None, plot=False)
+        with pytest.raises(SystemExit) as exc_info:
+            cli_predict.cmd_predict(args)
+        assert exc_info.value.code == 1
+        assert "id" in capsys.readouterr().err
+
+    def test_csv_skips_bad_row_and_continues(self, monkeypatch, tmp_path, capsys):
+        from beckmann_pyscf import cli_predict
+
+        csv_path = tmp_path / "mols.csv"
+        csv_path.write_text("id,SMILES\nmol_a,BAD\nmol_b,GOOD\n")
+
+        def fake_predict_one(smiles, name, out, plot):
+            return smiles == "GOOD"
+
+        monkeypatch.setattr(cli_predict, "_predict_one", fake_predict_one)
+        args = _fake_args(smiles=None, name="query", csv=str(csv_path), out=str(tmp_path / "out"), plot=False)
+        cli_predict.cmd_predict(args)  # should not raise -- one bad row doesn't abort the batch
+        err = capsys.readouterr().err
+        assert "SKIP mol_a" in err
 
 
 class TestPlotWcnmax:
