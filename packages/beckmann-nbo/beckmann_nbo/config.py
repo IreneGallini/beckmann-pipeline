@@ -42,7 +42,7 @@ DATA_OUTPUT = ROOT / "data" / "output"
 
 FUNCTIONAL   = "wB97XD"
 BASIS        = "6-311+G(d,p)"
-NPROC        = 6
+NPROC        = 10
 MEM_GB       = 16
 NBO_KEYWORDS = "E2PERT BNDIDX NBOSUM CMO"
 SOLVENT      = "scrf=(smd,solvent=water)"

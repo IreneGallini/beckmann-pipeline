@@ -1,0 +1,13 @@
+%chk=mol_030_Z_nbo.chk
+%oldchk=mol_030_Z_opt.chk
+%nprocshared=10
+%mem=16GB
+#p wB97XD/6-311+G(d,p) sp pop=nbo7read geom=checkpoint guess=read scrf=(smd,solvent=water)
+
+mol_030_Z NBO  [oxime: C12=N13-O14]
+
+1 1
+
+$NBO E2PERT BNDIDX NBOSUM CMO $END
+
+

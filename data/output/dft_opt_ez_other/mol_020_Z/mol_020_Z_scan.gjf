@@ -1,7 +1,7 @@
 %chk=mol_020_Z_scan_pt1.chk
-%nprocshared=6
+%nprocshared=10
 %mem=16GB
-#p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
+#p wB97XD/6-311+G(d,p) opt=(ModRedundant,CalcFC,MaxCycles=300) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
 mol_020_Z scan pt1 (R0+0.05A) rigid O-N displacement then constrained opt  [oxime: C11=N12-O13]
 
@@ -38,7 +38,7 @@ B 12 13 F
 
 --Link1--
 %chk=mol_020_Z_scan_pt1.chk
-%nprocshared=6
+%nprocshared=10
 %mem=16GB
 #p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
 
@@ -50,9 +50,9 @@ $NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
 
 --Link1--
 %chk=mol_020_Z_scan_pt2.chk
-%nprocshared=6
+%nprocshared=10
 %mem=16GB
-#p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
+#p wB97XD/6-311+G(d,p) opt=(ModRedundant,CalcFC,MaxCycles=300) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
 mol_020_Z scan pt2 (R0+0.10A) rigid O-N displacement then constrained opt  [oxime: C11=N12-O13]
 
@@ -89,7 +89,7 @@ B 12 13 F
 
 --Link1--
 %chk=mol_020_Z_scan_pt2.chk
-%nprocshared=6
+%nprocshared=10
 %mem=16GB
 #p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
 
@@ -101,9 +101,9 @@ $NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
 
 --Link1--
 %chk=mol_020_Z_scan_pt3.chk
-%nprocshared=6
+%nprocshared=10
 %mem=16GB
-#p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
+#p wB97XD/6-311+G(d,p) opt=(ModRedundant,CalcFC,MaxCycles=300) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
 mol_020_Z scan pt3 (R0+0.15A) rigid O-N displacement then constrained opt  [oxime: C11=N12-O13]
 
@@ -140,7 +140,7 @@ B 12 13 F
 
 --Link1--
 %chk=mol_020_Z_scan_pt3.chk
-%nprocshared=6
+%nprocshared=10
 %mem=16GB
 #p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
 
@@ -152,9 +152,9 @@ $NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
 
 --Link1--
 %chk=mol_020_Z_scan_pt4.chk
-%nprocshared=6
+%nprocshared=10
 %mem=16GB
-#p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
+#p wB97XD/6-311+G(d,p) opt=(ModRedundant,CalcFC,MaxCycles=300) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
 mol_020_Z scan pt4 (R0+0.20A) rigid O-N displacement then constrained opt  [oxime: C11=N12-O13]
 
@@ -191,7 +191,7 @@ B 12 13 F
 
 --Link1--
 %chk=mol_020_Z_scan_pt4.chk
-%nprocshared=6
+%nprocshared=10
 %mem=16GB
 #p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
 
@@ -203,9 +203,9 @@ $NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
 
 --Link1--
 %chk=mol_020_Z_scan_pt5.chk
-%nprocshared=6
+%nprocshared=10
 %mem=16GB
-#p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
+#p wB97XD/6-311+G(d,p) opt=(ModRedundant,CalcFC,MaxCycles=300) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
 mol_020_Z scan pt5 (R0+0.25A) rigid O-N displacement then constrained opt  [oxime: C11=N12-O13]
 
@@ -242,7 +242,7 @@ B 12 13 F
 
 --Link1--
 %chk=mol_020_Z_scan_pt5.chk
-%nprocshared=6
+%nprocshared=10
 %mem=16GB
 #p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
 
@@ -254,9 +254,9 @@ $NBO CMO PRINT=2 E2PERT=0.05 BNDIDX $END
 
 --Link1--
 %chk=mol_020_Z_scan_pt6.chk
-%nprocshared=6
+%nprocshared=10
 %mem=16GB
-#p wB97XD/6-311+G(d,p) opt=(ModRedundant) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
+#p wB97XD/6-311+G(d,p) opt=(ModRedundant,CalcFC,MaxCycles=300) SCF=(Tight,XQC) NoSymm scrf=(smd,solvent=water)
 
 mol_020_Z scan pt6 (R0+0.30A) rigid O-N displacement then constrained opt  [oxime: C11=N12-O13]
 
@@ -293,7 +293,7 @@ B 12 13 F
 
 --Link1--
 %chk=mol_020_Z_scan_pt6.chk
-%nprocshared=6
+%nprocshared=10
 %mem=16GB
 #p wB97XD/6-311+G(d,p) Geom=Check Guess=Read Stable=Opt Pop=NBO7Read Density=Current scrf=(smd,solvent=water)
 
