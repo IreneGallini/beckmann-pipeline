@@ -1,4 +1,0 @@
-[tool.pytest.ini_options]
-markers = [
-    "slow: runs real Auto3D/AIMNet2/PySCF (minutes, not seconds)",
-]

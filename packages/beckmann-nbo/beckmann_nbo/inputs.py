@@ -27,10 +27,16 @@ OXIME_PAT = Chem.MolFromSmarts('[C:1]=[N:2]-[O+:3]')
 def _all_ids() -> set[str]:
     """Numeric IDs for every substrate in the benchmark set (e.g. '001'..'034'),
     derived from benchmark_meta.json rather than hand-maintained, so scope
-    tracks the benchmark set instead of drifting from it."""
+    tracks the benchmark set instead of drifting from it. Returns an empty
+    set (rather than raising at import time) when no benchmark set is
+    present -- this export ships without one; ALL_IDS only matters to the
+    benchmark-batch scripts, not to the predict/status/report CLI path."""
     import json
     from beckmann_nbo.config import DATA_INPUT
-    meta = json.loads((DATA_INPUT / "benchmark_meta.json").read_text())
+    meta_path = DATA_INPUT / "benchmark_meta.json"
+    if not meta_path.exists():
+        return set()
+    meta = json.loads(meta_path.read_text())
     return {key.split("_")[1] for key in meta}
 
 

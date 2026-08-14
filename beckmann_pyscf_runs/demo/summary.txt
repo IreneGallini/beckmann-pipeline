@@ -1,3 +1,0 @@
-demo: prediction = R
-  interior wCNmax minimum: R* = 1.6500 A, w* = 0.4226, MO39
-  AIMNet2 energy: -13018.059547 eV

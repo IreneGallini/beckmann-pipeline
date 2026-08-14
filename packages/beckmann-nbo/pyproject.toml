@@ -13,8 +13,5 @@ dependencies = [
     "matplotlib",
 ]
 
-[project.scripts]
-beckmann-nbo = "beckmann_nbo.cli:main"
-
 [tool.setuptools.packages.find]
 include = ["beckmann_nbo*"]
