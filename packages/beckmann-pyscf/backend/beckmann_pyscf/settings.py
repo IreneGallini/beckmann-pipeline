@@ -52,3 +52,59 @@ LOG_LEVEL = os.environ.get("BECKMANN_LOG_LEVEL", "INFO")
 # to a different origin/domain than the API.
 _origins = os.environ.get("BECKMANN_CORS_ORIGINS", "")
 ALLOWED_ORIGINS = [o.strip() for o in _origins.split(",") if o.strip()]
+
+# Shared job store + rate-limit storage, e.g. "redis://127.0.0.1:6379/0".
+# Empty (the default) keeps everything in this one process's memory, which
+# is fine for local dev but requires `gunicorn -w 1` (see jobs.py). Set it
+# to run several gunicorn workers plus one `python dispatcher.py`.
+REDIS_URL = os.environ.get("BECKMANN_REDIS_URL", "")
+
+# How many reverse proxies sit in front of the app and append to
+# X-Forwarded-For. Must be >= 1 behind a proxy (Cloud Run -- see DEPLOY.md --
+# nginx, ...) -- otherwise every request appears to come from the proxy's
+# own IP and the per-IP rate limit becomes one limit shared by everyone.
+# 0 (the default) trusts no forwarding headers: correct when clients
+# connect directly, and the only safe choice then, since the header is
+# client-controlled.
+TRUSTED_PROXIES = _int_env("BECKMANN_TRUSTED_PROXIES", 0)
+
+# "async" (default): /submit returns a job id at once, the job runs in the
+# background, the frontend polls /status. Needs a host that keeps CPU on
+# between requests.
+# "sync": /predict runs the whole scan inside one streaming HTTP request,
+# and /submit + /status are disabled. For hosts that throttle CPU outside
+# requests -- Cloud Run with request-based billing (see DEPLOY.md).
+API_MODE = os.environ.get("BECKMANN_API_MODE", "async").strip().lower()
+if API_MODE not in ("async", "sync"):
+    raise ValueError(f"BECKMANN_API_MODE must be 'async' or 'sync', got {API_MODE!r}")
+
+# Seconds between the whitespace heartbeats /predict streams while a scan
+# runs: keeps the long connection from being dropped as idle, and makes a
+# disconnected client show up (as a failed write) within this long.
+SYNC_HEARTBEAT_SECONDS = _int_env("BECKMANN_SYNC_HEARTBEAT", 20)
+
+# Serves GET /debug/client-ip when "1": shows the raw X-Forwarded-For and
+# the client IP the rate limiter actually keys on, to verify
+# BECKMANN_TRUSTED_PROXIES after a deploy. Off (404) otherwise.
+DEBUG_CLIENT_IP = os.environ.get("BECKMANN_DEBUG_CLIENT_IP", "") == "1"
+
+# --- Free-tier usage gate (Cloud Run; see DEPLOY.md, "Staying at $0") ---
+# When "1", every /predict first reads this month's billable Cloud Run time
+# (beckmann_pyscf/usage.py) and refuses with 503 if this scan, at its
+# worst case (JOB_TIMEOUT_SECONDS + startup allowance), could push usage
+# past FREE_TIER_FRACTION of the free tier. Fails closed: if usage can't be
+# read, no scan runs.
+USAGE_GATE = os.environ.get("BECKMANN_USAGE_GATE", "") == "1"
+SERVICE_NAME = os.environ.get("K_SERVICE", "beckmann-pyscf")  # Cloud Run sets K_SERVICE
+CLOUD_RUN_CPU = float(os.environ.get("BECKMANN_CLOUD_RUN_CPU", "1"))
+CLOUD_RUN_MEMORY_GIB = float(os.environ.get("BECKMANN_CLOUD_RUN_MEMORY_GIB", "4"))
+FREE_TIER_FRACTION = float(os.environ.get("BECKMANN_FREE_TIER_FRACTION", "0.75"))
+# Cold start + shutdown are billed too; reserve this much on top of the
+# scan's own worst case.
+STARTUP_ALLOWANCE_SECONDS = _int_env("BECKMANN_STARTUP_ALLOWANCE", 120)
+
+# Set on Cloud Run when the page is served elsewhere (GitHub Pages): "/"
+# redirects there and /static/* isn't served, so nobody downloads the
+# 24 MB Ketcher bundle from Cloud Run (whose outbound data is billed
+# beyond 1 GiB/month).
+FRONTEND_URL = os.environ.get("BECKMANN_FRONTEND_URL", "").strip()

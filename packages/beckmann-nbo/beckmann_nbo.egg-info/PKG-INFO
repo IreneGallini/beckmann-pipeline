@@ -1,8 +1,0 @@
-Metadata-Version: 2.4
-Name: beckmann-nbo
-Version: 0.1.0
-Summary: Gaussian/NBO7/Citadel product for the Beckmann rearrangement pipeline: DFT input generation, HPC submission, NBO7 log parsing, and NBO-specific descriptors (Psi, Lambda).
-Requires-Python: >=3.11
-Requires-Dist: beckmann-core==0.1.0
-Requires-Dist: rdkit==2026.3.3
-Requires-Dist: matplotlib

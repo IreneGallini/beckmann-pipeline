@@ -1,0 +1,128 @@
+# Builds the beckmann-pyscf image, pushes it to Docker Hub (public repo:
+# free storage, unlike Artifact Registry past 0.5 GB), and deploys it to
+# Cloud Run. One-time setup: DEPLOY.md.
+#
+# Google auth is Workload Identity Federation: GitHub's short-lived OIDC
+# token is exchanged for short-lived credentials of the deploy service
+# account. No Google key file anywhere. The WIF provider only accepts
+# tokens from this repo's main branch.
+#
+# Repo variables (Settings -> Secrets and variables -> Actions -> Variables):
+#   GCP_PROJECT_ID, GCP_REGION, GCP_WIF_PROVIDER, GCP_DEPLOY_SA,
+#   GCP_RUNTIME_SA, DOCKERHUB_USERNAME; optional PAGES_URL (defaults to
+#   https://<owner>.github.io/<repo>/), CLOUD_RUN_MAX_INSTANCES (default 1).
+# Repo secret: DOCKERHUB_TOKEN (Docker Hub access token, Read & Write).
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/beckmann-core/**"
+      - "packages/beckmann-pyscf/backend/**"
+      - "packages/beckmann-pyscf/pyproject.toml"
+      - ".dockerignore"
+      - ".github/workflows/deploy-cloud-run.yml"
+      - ".github/scripts/free_tier_guard.py"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cloud-run
+  cancel-in-progress: false  # never interrupt a half-finished deploy
+
+permissions:
+  contents: read
+  id-token: write  # lets the job request GitHub's OIDC token for WIF
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION }}
+  SERVICE: beckmann-pyscf
+  IMAGE: docker.io/${{ vars.DOCKERHUB_USERNAME }}/beckmann-pyscf
+  MAX_INSTANCES: ${{ vars.CLOUD_RUN_MAX_INSTANCES || '1' }}
+  # Instance size. The usage gate and the free-tier guard compute the
+  # monthly allowance from these, so they must match --cpu/--memory below.
+  CLOUD_RUN_CPU: "1"
+  CLOUD_RUN_MEMORY_GIB: "4"
+  # Fraction of the free tier the service may use per month: the rest is
+  # safety margin (billing-month offset, the guard's hourly granularity).
+  FREE_TIER_FRACTION: "0.75"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Skipped (not failed) until the setup in DEPLOY.md is done.
+    if: ${{ vars.GCP_PROJECT_ID != '' && vars.DOCKERHUB_USERNAME != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/beckmann-pyscf/backend/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+          # Reuse the heavy dependency layers (torch, pyscf, rdkit) between
+          # runs; only the package-source layers rebuild on a code change.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Work out the GitHub Pages address
+        id: pages
+        run: |
+          # https://<owner>.github.io/<repo>/ unless PAGES_URL overrides it.
+          default="https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}/"
+          url="${{ vars.PAGES_URL }}"; url="${url:-$default}"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "origin=$(echo "$url" | sed -E 's#^(https://[^/]+).*#\1#')" >> "$GITHUB_OUTPUT"
+
+      # Every Cloud Run setting lives here, so the service config is
+      # version-controlled and can't silently drift. Why each value:
+      # DEPLOY.md, "Cloud Run settings".
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --image "${IMAGE}:${GITHUB_SHA}" \
+            --region "$REGION" \
+            --service-account "${{ vars.GCP_RUNTIME_SA }}" \
+            --execution-environment gen2 \
+            --port 8080 \
+            --cpu "$CLOUD_RUN_CPU" \
+            --memory "${CLOUD_RUN_MEMORY_GIB}Gi" \
+            --concurrency 1 \
+            --min-instances 0 \
+            --max-instances "$MAX_INSTANCES" \
+            --timeout 3600 \
+            --cpu-throttling \
+            --allow-unauthenticated \
+            --set-env-vars "^@^BECKMANN_API_MODE=sync@BECKMANN_TRUSTED_PROXIES=1@BECKMANN_JOB_TIMEOUT=3300@PYSCF_MAX_MEMORY=2000@BECKMANN_USAGE_GATE=1@BECKMANN_CLOUD_RUN_CPU=${CLOUD_RUN_CPU}@BECKMANN_CLOUD_RUN_MEMORY_GIB=${CLOUD_RUN_MEMORY_GIB}@BECKMANN_FREE_TIER_FRACTION=${FREE_TIER_FRACTION}@BECKMANN_FRONTEND_URL=${{ steps.pages.outputs.url }}@BECKMANN_CORS_ORIGINS=${{ steps.pages.outputs.origin }}" \
+            --quiet
+
+      # --allow-unauthenticated above re-opens public access, so re-apply
+      # the free-tier guard right away (closes it again if this month's
+      # allowance is used up).
+      - name: Enforce free-tier guard
+        run: python3 .github/scripts/free_tier_guard.py
+
+      - name: Show service URL
+        run: |
+          url=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
+          echo "API: $url  (page: ${{ steps.pages.outputs.url }})"
+          echo "### Deployed API to $url" >> "$GITHUB_STEP_SUMMARY"

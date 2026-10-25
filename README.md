@@ -35,6 +35,17 @@ Installs all three packages in editable mode. Python 3.11. `KMP_DUPLICATE_LIB_OK
 
 **Open-source, HPC-free prediction (no Gaussian/Citadel needed):**
 
+From the terminal, without cloning this repo:
+
+```bash
+pip install \
+  "beckmann-core @ git+https://github.com/IreneGallini/beckmann-pipeline.git@v0.1.0#subdirectory=packages/beckmann-core" \
+  "beckmann-pyscf @ git+https://github.com/IreneGallini/beckmann-pipeline.git@v0.1.0#subdirectory=packages/beckmann-pyscf"
+beckmann-pyscf predict --smiles "O=C1CCC2=CC=CC=C21" --name tetralone --plot
+```
+
+Or the web app, locally (the hosted version: page on GitHub Pages, API on Google Cloud Run, kept at $0; see `DEPLOY.md`):
+
 ```bash
 cd packages/beckmann-pyscf/backend
 python app.py   # http://localhost:5001

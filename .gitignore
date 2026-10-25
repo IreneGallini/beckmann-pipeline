@@ -15,3 +15,8 @@ Ring Size and Substituent Effects in the Beckmann Rearrangement- A Systematic Ex
 # ts_final_hessian.h5 is ever read by code (beckmann/ts_ml/neb.py:verify_ts_ml),
 # and even that's treated as regenerable working data, not a tracked result.
 data/output/ts_ml/
+# setuptools build metadata from `pip install -e`, regenerated on every install
+*.egg-info/
+
+# frontend/build_static.py output (GitHub Pages build)
+_site/

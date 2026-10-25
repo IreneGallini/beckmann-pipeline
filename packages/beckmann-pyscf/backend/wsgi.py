@@ -1,22 +1,26 @@
 """
-gunicorn entrypoint: `gunicorn -w 1 -b 0.0.0.0:5001 wsgi:app`
+gunicorn entrypoint. How to run it depends on the mode (see jobs.py's and
+entrypoint.sh's docstrings for the full design):
 
-MUST run as exactly one worker (`-w 1`). jobs.py's job store (JOBS/
-_PROCESSES/_PENDING) lives in plain Python memory in whichever process
-imports it -- with more than one gunicorn worker, each worker would have
-its own independent copy, so a `/status/<job_id>` poll would 404 whenever
-it happened to land on a different worker than the one that handled the
-matching `/submit`. This is safe to run with one worker despite being a
-prediction service: the actual heavy compute happens in a separate
-`multiprocessing.Process` per job (see jobs.py), not in the request-handling
-worker itself, so a single gunicorn worker can still comfortably handle
-many concurrent lightweight `/submit`/`/status` requests. The real
-concurrency limit on heavy compute is `settings.MAX_CONCURRENT_JOBS`, not
-the gunicorn worker count.
+- **Sync mode** (`BECKMANN_API_MODE=sync`, the Docker image / Cloud Run
+  default): `gunicorn -w 1 --worker-class gthread --threads 4 -b 0.0.0.0:8080 wsgi:app`.
+  Each scan runs inside its own streaming /predict request; one worker
+  process so the one-scan-at-a-time lock covers the whole container, and
+  gthread so long requests aren't killed by gunicorn's --timeout.
 
-Going beyond one worker (or beyond one host) requires replacing jobs.py's
-in-memory store with something shared across processes (Redis, a database)
--- not done here, no infra decision has been made yet to build against.
+- **Async mode, no Redis** (the `python app.py` default):
+  `gunicorn -w 1 -b 0.0.0.0:5001 wsgi:app`. Exactly one worker: the job
+  store lives in that worker's memory, so with more, a `/status/<job_id>`
+  poll would 404 whenever it landed on a different worker than the
+  matching `/submit`. The dispatcher runs as a thread inside that worker.
+
+- **Async mode with Redis**: `python dispatcher.py` (exactly one) plus
+  `gunicorn -w N -b 0.0.0.0:5001 wsgi:app` (any N). Job records, the
+  pending queue and rate-limit counts all live in Redis.
+
+In every mode the heavy compute runs in a separate `multiprocessing.Process`
+per job (its own process group), never in the request-handling process
+itself.
 """
 from app import app
 

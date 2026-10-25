@@ -12,17 +12,10 @@ import jobs
 
 @pytest.fixture(autouse=True)
 def reset_state():
-    jobs.JOBS.clear()
-    jobs._PROCESSES.clear()
-    jobs._STARTED_AT.clear()
-    jobs._FINISHED_AT.clear()
-    jobs._PENDING.clear()
+    jobs.reset_for_tests()
     appmod.limiter.reset()
     yield
-    for proc in jobs._PROCESSES.values():
-        if proc.is_alive():
-            proc.terminate()
-            proc.join(timeout=5)
+    jobs.reset_for_tests()
 
 
 @pytest.fixture
@@ -37,10 +30,20 @@ def test_health_returns_ok(client):
     assert resp.get_json() == {"status": "ok"}
 
 
+def test_health_reports_unreachable_job_store(client):
+    class _DownStore(jobs.MemoryStore):
+        def ping(self):
+            return False
+    jobs.reset_for_tests(_DownStore())
+    resp = client.get("/health")
+    assert resp.status_code == 503
+    assert resp.get_json()["status"] == "degraded"
+
+
 def test_submit_missing_smiles_returns_400_no_job(client):
     resp = client.post("/submit", json={})
     assert resp.status_code == 400
-    assert jobs.JOBS == {}
+    assert jobs.get_store().job_count() == 0
 
 
 def test_submit_invalid_smiles_fails_synchronously_no_job_created(client):
@@ -49,14 +52,14 @@ def test_submit_invalid_smiles_fails_synchronously_no_job_created(client):
     assert "error" in resp.get_json()
     # The whole point of the synchronous pre-check: no job is created at
     # all for input that was never going to work.
-    assert jobs.JOBS == {}
+    assert jobs.get_store().job_count() == 0
     assert jobs._PROCESSES == {}
 
 
 def test_submit_no_ketone_fails_synchronously(client):
     resp = client.post("/submit", json={"smiles": "CCO"})  # ethanol, no ketone
     assert resp.status_code == 400
-    assert jobs.JOBS == {}
+    assert jobs.get_store().job_count() == 0
 
 
 def test_rate_limit_returns_429_after_threshold(client):

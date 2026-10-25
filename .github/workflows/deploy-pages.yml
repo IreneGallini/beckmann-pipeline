@@ -1,0 +1,75 @@
+# Publishes the web page (HTML + the 24 MB Ketcher editor) on GitHub
+# Pages, free, so Cloud Run only ever serves the /predict API. Runs after
+# every Cloud Run deploy (to pick up the service URL) and whenever the
+# frontend changes.
+#
+# One-time: repo Settings -> Pages -> Build and deployment -> Source:
+# "GitHub Actions". See DEPLOY.md.
+name: Deploy page to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/beckmann-pyscf/frontend/**"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_run:
+    workflows: ["Deploy to Cloud Run"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write  # both for WIF (to look up the API URL) and for Pages
+
+env:
+  REGION: ${{ vars.GCP_REGION }}
+  SERVICE: beckmann-pyscf
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: >-
+      ${{ vars.GCP_PROJECT_ID != '' &&
+          (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build static site
+        run: |
+          api=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
+          if [ -z "$api" ]; then
+            echo "::error::Cloud Run service $SERVICE not found; run 'Deploy to Cloud Run' first."
+            exit 1
+          fi
+          pip install "jinja2==3.1.6"
+          python packages/beckmann-pyscf/frontend/build_static.py --api-base "$api" --out _site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

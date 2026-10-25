@@ -14,8 +14,12 @@ dependencies = [
     "gunicorn==26.0.0",
     "flask-limiter==4.1.1",
     "flask-cors==6.0.5",
+    "redis==8.1.0",
     "matplotlib",
 ]
+
+[project.optional-dependencies]
+test = ["pytest", "fakeredis==2.40.0"]
 
 [project.scripts]
 beckmann-pyscf = "beckmann_pyscf.cli:main"

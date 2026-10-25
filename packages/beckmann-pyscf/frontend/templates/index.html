@@ -296,7 +296,7 @@
   <!-- Left: input -->
   <div class="panel">
     <div class="section-label">Draw substrate</div>
-    <iframe id="ketcher-frame" src="/static/ketcher/standalone/index.html" title="Ketcher chemical structure editor"></iframe>
+    <iframe id="ketcher-frame" src="static/ketcher/standalone/index.html" title="Ketcher chemical structure editor"></iframe>
     <button class="btn-use-ketcher" onclick="getFromKetcher()">&#8595; Use structure from Ketcher</button>
 
     <div class="divider">or enter SMILES directly</div>
@@ -327,6 +327,9 @@
 
 <script src="https://3dmol.csb.pitt.edu/build/3Dmol-min.js"></script>
 <script>
+  const API_MODE = {{ api_mode | tojson }};
+  // "" when this page is served by the API itself; the Cloud Run URL on GitHub Pages.
+  const API_BASE = {{ api_base | tojson }};
   let pollTimer = null;
 
   async function getFromKetcher() {
@@ -362,53 +365,110 @@
     setStatus('<span class="spinner"></span>Submitting&hellip;');
 
     try {
-      const resp = await fetch('/submit', {
+      if (API_MODE === 'sync') {
+        await runSync(smiles);
+      } else {
+        await runAsync(smiles);
+      }
+    } catch (e) {
+      finish();
+      showError(e.message);
+    }
+  }
+
+  // Parse a JSON response body, turning a non-JSON one (e.g. the hosting
+  // platform's own "too many requests" page) into a readable error.
+  async function readJson(resp) {
+    const text = await resp.text();
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      if (resp.status === 429 || resp.status === 503) {
+        throw new Error('The server is busy with another prediction, please try again later.');
+      }
+      throw new Error('Unexpected server response (HTTP ' + resp.status + ').');
+    }
+  }
+
+  // Sync mode (Cloud Run): one long request that runs the whole scan. The
+  // server streams whitespace heartbeats, then the final job record, so
+  // the whole body parses as JSON once it ends.
+  async function runSync(smiles) {
+    setStatus('<span class="spinner"></span>Running pipeline: Auto3D &rarr; AIMNet2 &rarr; PySCF scan&hellip; ' +
+              'this usually takes 20&ndash;30 minutes. Keep this tab open: closing it cancels the run.');
+    let resp;
+    try {
+      // text/plain keeps this a CORS "simple request" (no preflight) when
+      // the page is on GitHub Pages; the server parses the body as JSON.
+      resp = await fetch(API_BASE + '/predict', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'text/plain'},
         body: JSON.stringify({smiles})
       });
-      const data = await resp.json();
-      if (data.error) throw new Error(data.error);
-
-      setStatus('<span class="spinner"></span>Running pipeline: Auto3D &rarr; AIMNet2 &rarr; PySCF scan&hellip;');
-      const jobId = data.job_id;
-      pollTimer = setInterval(() => pollStatus(jobId), 5000);
-    } catch (e) {
-      showError(e.message);
-      setStatus('');
-      document.getElementById('run-btn').disabled = false;
+    } catch (_) {
+      throw new Error('Lost the connection to the server. Please try again.');
     }
+    let job;
+    try {
+      job = await readJson(resp);
+    } catch (e) {
+      if (e instanceof TypeError) throw new Error('The connection dropped before the prediction finished. Please try again.');
+      throw e;
+    }
+    if (job.error && !job.status) throw new Error(job.error);
+    handleJob(job);
+  }
+
+  // Async mode: submit, then poll /status until the job finishes.
+  async function runAsync(smiles) {
+    const resp = await fetch(API_BASE + '/submit', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({smiles})
+    });
+    const data = await readJson(resp);
+    if (data.error) throw new Error(data.error);
+
+    setStatus('<span class="spinner"></span>Running pipeline: Auto3D &rarr; AIMNet2 &rarr; PySCF scan&hellip;');
+    const jobId = data.job_id;
+    pollTimer = setInterval(() => pollStatus(jobId), 5000);
   }
 
   async function pollStatus(jobId) {
     try {
-      const resp = await fetch('/status/' + jobId);
-      const job  = await resp.json();
-      if (job.status === 'done') {
-        clearInterval(pollTimer);
-        setStatus('');
-        document.getElementById('run-btn').disabled = false;
-        renderResult(job.result);
-      } else if (job.status === 'error') {
-        clearInterval(pollTimer);
-        showError(job.error || 'Pipeline error');
-        setStatus('');
-        document.getElementById('run-btn').disabled = false;
-      } else if (job.status === 'invalid_input') {
-        clearInterval(pollTimer);
-        showError(job.error || 'This SMILES could not be processed.');
-        setStatus('');
-        document.getElementById('run-btn').disabled = false;
-      } else if (job.status === 'timeout') {
-        clearInterval(pollTimer);
-        showError('This took longer than expected and was stopped. Try again, or try a smaller molecule.');
-        setStatus('');
-        document.getElementById('run-btn').disabled = false;
-      } else if (job.status === 'queued') {
-        setStatus('<span class="spinner"></span>Waiting in queue&hellip; the server is busy with other jobs right now.');
-      }
-      // 'running' keep polling with the existing status message
+      const resp = await fetch(API_BASE + '/status/' + jobId);
+      handleJob(await resp.json());
     } catch (_) { /* network hiccup keep polling */ }
+  }
+
+  function finish() {
+    clearInterval(pollTimer);
+    setStatus('');
+    document.getElementById('run-btn').disabled = false;
+  }
+
+  // Shared by both modes: act on a job record ({status, result|error}).
+  function handleJob(job) {
+    if (job.status === 'done') {
+      finish();
+      renderResult(job.result);
+    } else if (job.status === 'error') {
+      finish();
+      showError(job.error || 'Pipeline error');
+    } else if (job.status === 'invalid_input') {
+      finish();
+      showError(job.error || 'This SMILES could not be processed.');
+    } else if (job.status === 'timeout') {
+      finish();
+      showError('This took longer than expected and was stopped. Try again, or try a smaller molecule.');
+    } else if (job.status === 'queued') {
+      setStatus('<span class="spinner"></span>Waiting in queue&hellip; the server is busy with other jobs right now.');
+    } else if (job.error) {
+      // e.g. a 404 for a job that expired or was lost in a restart
+      finish();
+      showError(job.error);
+    }
+    // 'running' keep polling with the existing status message
   }
 
   function renderResult(result) {

@@ -19,6 +19,8 @@ dependencies:
     - "aimnet[ase]"
     - pyscf
     - flask
+    - redis
+    - fakeredis
     # Editable installs for all three packages -- see CLAUDE.md for why the
     # monorepo is split this way. beckmann-nbo/beckmann-pyscf both pull in
     # beckmann-core automatically via their own pyproject.toml dependency.

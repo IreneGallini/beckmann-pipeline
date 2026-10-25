@@ -1,0 +1,12 @@
+# Build context for packages/beckmann-pyscf/backend/Dockerfile is the repo
+# root; it only needs packages/beckmann-core and packages/beckmann-pyscf.
+*
+!packages/beckmann-core
+!packages/beckmann-pyscf
+**/__pycache__/
+**/*.pyc
+**/*.egg-info/
+**/.pytest_cache/
+**/beckmann_pyscf_runs/
+**/.env
+**/.DS_Store

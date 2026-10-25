@@ -1,2 +1,0 @@
-[console_scripts]
-beckmann-pyscf = beckmann_pyscf.cli:main

@@ -1,0 +1,51 @@
+# Hourly backstop that keeps the Cloud Run service inside its free tier:
+# it makes the service private when this month's usage nears the
+# allowance, and public again once a new month resets it. Logic and
+# reasoning: .github/scripts/free_tier_guard.py and DEPLOY.md,
+# "Staying at $0".
+#
+# Note: GitHub pauses scheduled workflows after 60 days without repo
+# activity (it emails you first). The app's own per-scan usage gate keeps
+# working regardless; re-enable this from the Actions tab if it's paused.
+name: Free-tier guard
+
+on:
+  schedule:
+    - cron: "23 * * * *"  # hourly, at :23 (off the busy top of the hour)
+  workflow_dispatch:
+
+concurrency:
+  group: free-tier-guard
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION }}
+  SERVICE: beckmann-pyscf
+  # Must match deploy-cloud-run.yml.
+  CLOUD_RUN_CPU: "1"
+  CLOUD_RUN_MEMORY_GIB: "4"
+  FREE_TIER_FRACTION: "0.75"
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    if: ${{ vars.GCP_PROJECT_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # A failure here (e.g. usage unreadable) fails the run, and GitHub
+      # emails you about failed scheduled runs.
+      - name: Check usage and open/close public access
+        run: python3 .github/scripts/free_tier_guard.py
